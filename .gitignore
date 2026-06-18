@@ -30,7 +30,9 @@ ClaudeCode/
 # CodeBuddy
 .codebuddy/*
 !.codebuddy/rules/
-!.codebuddy/plans/
+!.codebuddy/skills/
+!.codebuddy/agents/
+!.codebuddy/hooks/
 
 # OS
 .DS_Store
