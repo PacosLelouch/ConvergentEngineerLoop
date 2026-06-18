@@ -63,14 +63,6 @@ def copy_dir(src, dst):
 def copy_skill_dir(shared_skills_dir, target_skills_dir):
     """复制 skill 目录（SKILL.md + references + templates + checklists）。"""
     copy_dir(shared_skills_dir, target_skills_dir)
-    # 给 SKILL.md 添加头部标注
-    skill_md = os.path.join(target_skills_dir, 'SKILL.md')
-    if os.path.exists(skill_md):
-        with open(skill_md, 'r', encoding='utf-8') as f:
-            content = f.read()
-        if not content.startswith('<!-- 由 sync-platforms.py 自动生成'):
-            with open(skill_md, 'w', encoding='utf-8') as f:
-                f.write('<!-- 由 sync-platforms.py 自动生成，修改请改 _shared/skills/ 下的真源 -->\n' + content)
 
 
 def read_agents_yaml():
