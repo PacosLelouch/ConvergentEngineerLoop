@@ -1,0 +1,63 @@
+# Dependencies
+node_modules/
+.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Build output
+dist/
+build/
+
+# 三平台生成目录（由 scripts/sync-platforms.py 生成，真源在 _shared/）
+CodeBuddy/
+Codex/
+ClaudeCode/
+
+# IDE
+.vscode/
+.idea/
+.obsidian/
+*.swp
+*.swo
+*~
+
+# CodeBuddy
+.codebuddy/*
+!.codebuddy/rules/
+!.codebuddy/plans/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# TypeScript build info
+*.tsbuildinfo
+
+# Test coverage
+coverage/
+htmlcov/
+.coverage
+
+# API server runtime logs
+api_server.log
+api_server_err.log
+
+# Vite
+*.local
+
+# Git commit message temp file
+.git_commit_msg_tmp.txt
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Runtime session data (scripts, renders, compare reports)
+data/

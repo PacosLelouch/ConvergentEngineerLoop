@@ -1,0 +1,20 @@
+# CEL Agent 元数据定义
+# 各 agent 的指令内容在 instructions/ 目录下的同名 .md 文件中
+
+agents:
+  convergence-planner:
+    name: convergence-planner
+    description: 收敛计划器——规划迭代策略，选择参考文件，定义误差度量和停止条件
+    trigger: "规划迭代|制定收敛策略|选择参考|定义误差|规划停止条件"
+  test-failure-analyst:
+    name: test-failure-analyst
+    description: 测试失败分析——分析测试失败根因，识别失败簇，建议修复策略
+    trigger: "测试失败|测试不通过|test fail|红测"
+  debug-root-cause-analyst:
+    name: debug-root-cause-analyst
+    description: 日志根因分析——从日志和堆栈追踪中提取根因，缩小假设空间
+    trigger: "日志分析|根因分析|堆栈追踪|debug|排查"
+  review-convergence-agent:
+    name: review-convergence-agent
+    description: 收敛审查——评估迭代质量，判断是否满足停止条件，检测震荡
+    trigger: "评估迭代|收敛审查|是否可以停止|迭代质量"
