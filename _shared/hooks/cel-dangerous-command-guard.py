@@ -90,10 +90,19 @@ def main():
     tool_input = data.get('tool_input', data.get('input', {}))
 
     # 只拦截命令执行类工具（使用平台特定的工具名集合）
-    if tool_name.lower() not in COMMAND_TOOLS:
+    # Codex 工具名区分大小写（Bash），用大小写不敏感匹配做兼容
+    if tool_name not in COMMAND_TOOLS and tool_name.lower() not in {t.lower() for t in COMMAND_TOOLS}:
         output(format_allow())
 
-    command_str = tool_input.get('command', tool_input.get('cmd', ''))
+    # 提取命令字符串
+    # Codex Bash 工具输入格式：{"command": "git push --force"}
+    # 其他平台可能用 cmd 或直接是字符串
+    if isinstance(tool_input, dict):
+        command_str = tool_input.get('command', tool_input.get('cmd', ''))
+    elif isinstance(tool_input, str):
+        command_str = tool_input
+    else:
+        command_str = ''
 
     decision, reason = check_command(command_str)
 

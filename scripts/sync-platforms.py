@@ -28,19 +28,20 @@ SHARED_DIR = os.path.join(ROOT_DIR, '_shared')
 CEL_HOOK_PREFIX = 'CEL '
 
 # 各平台被 hook 拦截的文件修改工具名（方向 C：精确化 matcher）
+# Codex 工具名：Edit, Write, apply_patch（Edit|Write 可匹配 apply_patch）
+# Claude Code 工具名：Edit, Write（与 Codex 同源）
 PLATFORM_EDIT_MATCHERS = {
     'codebuddy': 'write_to_file|replace_in_file',
-    # TODO: 确认 Claude Code 精确工具名后缩小范围
-    'claude': 'edit_file|write|edit',
-    # TODO: 确认 Codex 精确工具名后缩小范围
-    'codex': 'edit|write',
+    'claude': 'Edit|Write|apply_patch',
+    'codex': 'Edit|Write|apply_patch',
 }
 
 # 各平台被 hook 拦截的命令执行工具名
+# Codex 工具名：Bash
 PLATFORM_COMMAND_MATCHERS = {
     'codebuddy': 'execute_command',
-    'claude': 'bash|shell|terminal',
-    'codex': 'shell|run_command',
+    'claude': 'Bash',
+    'codex': 'Bash',
 }
 
 
@@ -244,32 +245,61 @@ def build_cel_hooks_claude():
 
 
 def build_cel_hooks_codex():
-    """构建 Codex 平台的 CEL hooks 配置（TOML 格式行列表）。"""
+    """构建 Codex 平台的 CEL hooks 配置（TOML 格式行列表）。
+
+    Codex hooks TOML 格式要求：
+    - [[hooks.PreToolUse]] 定义事件组，matcher 为正则表达式
+    - [[hooks.PreToolUse.hooks]] 定义该 matcher 下的 hook handler
+    - handler 必须有 type = "command"
+    - 命令推荐使用 git root 绝对路径
+    """
     edit_matcher = PLATFORM_EDIT_MATCHERS['codex']
     cmd_matcher = PLATFORM_COMMAND_MATCHERS['codex']
     lines = []
     lines.append('# CEL Hook 配置')
-    lines.append('[hooks.PreToolUse]')
-    lines.append('[[hooks.PreToolUse.matchers]]')
-    lines.append(f'pattern = "{edit_matcher}"')
+
+    # PreToolUse: 修改前守卫
+    lines.append('[[hooks.PreToolUse]]')
+    lines.append(f'matcher = "{edit_matcher}"')
+    lines.append('')
+    lines.append('[[hooks.PreToolUse.hooks]]')
+    lines.append('type = "command"')
     lines.append('command = "python .codex/hooks/cel-pre-edit-guard.py"')
-    lines.append('description = "CEL 修改前守卫：检查最小修改原则"')
+    lines.append('timeout = 30')
+    lines.append('statusMessage = "CEL: Checking minimal edit principle"')
     lines.append('')
-    lines.append('[[hooks.PreToolUse.matchers]]')
-    lines.append(f'pattern = "{cmd_matcher}"')
+
+    # PreToolUse: 危险命令拦截
+    lines.append('[[hooks.PreToolUse]]')
+    lines.append(f'matcher = "{cmd_matcher}"')
+    lines.append('')
+    lines.append('[[hooks.PreToolUse.hooks]]')
+    lines.append('type = "command"')
     lines.append('command = "python .codex/hooks/cel-dangerous-command-guard.py"')
-    lines.append('description = "CEL 危险命令拦截"')
+    lines.append('timeout = 30')
+    lines.append('statusMessage = "CEL: Checking dangerous command"')
     lines.append('')
-    lines.append('[hooks.PostToolUse]')
-    lines.append('[[hooks.PostToolUse.matchers]]')
-    lines.append(f'pattern = "{edit_matcher}"')
+
+    # PostToolUse: 修改后验证提醒
+    lines.append('[[hooks.PostToolUse]]')
+    lines.append(f'matcher = "{edit_matcher}"')
+    lines.append('')
+    lines.append('[[hooks.PostToolUse.hooks]]')
+    lines.append('type = "command"')
     lines.append('command = "python .codex/hooks/cel-post-edit-verify.py"')
-    lines.append('description = "CEL 修改后验证提醒"')
+    lines.append('timeout = 30')
+    lines.append('statusMessage = "CEL: Post-edit verification"')
     lines.append('')
-    lines.append('[[hooks.PostToolUse.matchers]]')
-    lines.append(f'pattern = "{edit_matcher}"')
+
+    # PostToolUse: 震荡检测
+    lines.append('[[hooks.PostToolUse]]')
+    lines.append(f'matcher = "{edit_matcher}"')
+    lines.append('')
+    lines.append('[[hooks.PostToolUse.hooks]]')
+    lines.append('type = "command"')
     lines.append('command = "python .codex/hooks/cel-oscillation-detector.py"')
-    lines.append('description = "CEL 震荡检测"')
+    lines.append('timeout = 30')
+    lines.append('statusMessage = "CEL: Oscillation detection"')
     return lines
 
 
@@ -397,8 +427,10 @@ def _merge_codex_toml(existing_content, agent_names, agents_meta, cel_hook_lines
     2. 移除 CEL 相关的块：
        - [agents.cel-*] 命名子表格（Codex 格式）
        - [[agents]] 块中 name 以 "cel-" 开头的（旧版格式，兼容清理）
-       - [[hooks.*.matchers]] 块中 command 含 "cel-" 的
-       - [hooks.*] section header 如果后续无非 CEL 的 matchers
+       - [[hooks.*]] 事件组块中 command 含 "cel-" 的
+       - [[hooks.*.hooks]] handler 块中 command 含 "cel-" 的
+       - [[hooks.*.matchers]] 旧格式块中 command 含 "cel-" 的
+       - 空的 [hooks.*] section（删除 CEL 后无剩余 handler）
     3. 追加新的 CEL 内容
     """
     lines = existing_content.split('\n')
@@ -411,7 +443,6 @@ def _merge_codex_toml(existing_content, agent_names, agents_meta, cel_hook_lines
         # === 处理 [agents.cel-*] 命名子表格（Codex 正确格式） ===
         if stripped.startswith('[agents.cel-') and not stripped.startswith('[['):
             block, i = _read_toml_block(lines, i)
-            # CEL agent，移除
             _remove_preceding_blank_and_comment(result)
             continue
 
@@ -425,7 +456,31 @@ def _merge_codex_toml(existing_content, agent_names, agents_meta, cel_hook_lines
             result.extend(block)
             continue
 
-        # === 处理 [[hooks.*.matchers]] 块 ===
+        # === 处理 [[hooks.*.hooks]] handler 块（Codex 新格式） ===
+        if stripped.startswith('[[hooks.') and '.hooks]]' in stripped:
+            block, i = _read_toml_block(lines, i)
+            is_cel = any('cel-' in line for line in block)
+            if is_cel:
+                _remove_preceding_blank_and_comment(result)
+                continue
+            result.extend(block)
+            continue
+
+        # === 处理 [[hooks.*]] 事件组块（Codex 新格式） ===
+        # 仅含 matcher 的一行块，检查后续是否紧跟 .hooks
+        if stripped.startswith('[[hooks.') and ']]' in stripped and '.hooks]]' not in stripped:
+            block, i = _read_toml_block(lines, i)
+            # 如果这个 matcher 组只有 matcher 行（没有 hooks 子块），
+            # 说明它的 hooks 已被移除，跳过
+            has_more_than_header = len([l for l in block if l.strip() and not l.strip().startswith('#')]) > 1
+            has_cel_matcher = any('cel-' in line for line in block)
+            if has_cel_matcher or not has_more_than_header:
+                _remove_preceding_blank_and_comment(result)
+                continue
+            result.extend(block)
+            continue
+
+        # === 处理 [[hooks.*.matchers]] 块（旧格式，兼容清理） ===
         if stripped.startswith('[[hooks.') and 'matchers]]' in stripped:
             block, i = _read_toml_block(lines, i)
             is_cel = any('cel-' in line or 'CEL' in line for line in block)
@@ -435,7 +490,7 @@ def _merge_codex_toml(existing_content, agent_names, agents_meta, cel_hook_lines
             result.extend(block)
             continue
 
-        # === 处理 [hooks.*] section header ===
+        # === 处理 [hooks.*] section header（旧格式，兼容清理） ===
         if stripped.startswith('[hooks.') and not stripped.startswith('[['):
             pending_section_header_idx = len(result)
             result.append(lines[i])
@@ -452,7 +507,7 @@ def _merge_codex_toml(existing_content, agent_names, agents_meta, cel_hook_lines
         result.append(lines[i])
         i += 1
 
-    # 检查空的 [hooks.*] section（只有 header 没有后续 matchers）
+    # 检查空的 [hooks.*] section（只有 header 没有后续内容）
     _remove_empty_hook_sections(result)
 
     # 后处理：移除残留的 CEL 相关注释行

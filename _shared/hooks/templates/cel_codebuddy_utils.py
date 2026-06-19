@@ -19,7 +19,7 @@ EDIT_TOOLS = {'write_to_file', 'replace_in_file'}
 COMMAND_TOOLS = {'execute_command'}
 
 
-def format_deny(reason):
+def format_deny(reason, event_name="PreToolUse"):
     """生成 CodeBuddy deny 响应。"""
     return {"permissionDecision": "deny", "reason": reason}
 
@@ -32,12 +32,12 @@ def format_allow(reason=""):
     return result
 
 
-def format_ask(reason):
+def format_ask(reason, event_name="PreToolUse"):
     """生成 CodeBuddy ask 响应（请求用户确认）。"""
     return {"permissionDecision": "ask", "reason": reason}
 
 
-def format_additional_context(context):
+def format_additional_context(context, event_name="PostToolUse"):
     """生成 CodeBuddy additionalContext 响应（注入上下文但不阻止）。"""
     return {"additionalContext": context}
 

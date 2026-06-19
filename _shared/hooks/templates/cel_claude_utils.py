@@ -12,12 +12,11 @@ import os
 import sys
 
 
-# 本平台被 hook 拦截的文件修改工具名
-# TODO: 确认 Claude Code 的精确工具名后缩小范围
-EDIT_TOOLS = {'edit_file', 'write', 'edit'}
+# Claude Code 工具名（与 Codex 同源，区分大小写）
+EDIT_TOOLS = {'Edit', 'Write', 'apply_patch'}
 
-# 本平台被 hook 拦截的命令执行工具名
-COMMAND_TOOLS = {'bash', 'shell', 'terminal'}
+# 命令执行工具名
+COMMAND_TOOLS = {'Bash'}
 
 
 def _wrap(decision, reason="", hook_event="PreToolUse"):
@@ -33,9 +32,9 @@ def _wrap(decision, reason="", hook_event="PreToolUse"):
     return result
 
 
-def format_deny(reason):
+def format_deny(reason, event_name="PreToolUse"):
     """生成 Claude Code deny 响应。"""
-    return _wrap("deny", reason)
+    return _wrap("deny", reason, event_name)
 
 
 def format_allow(reason=""):
@@ -43,12 +42,12 @@ def format_allow(reason=""):
     return _wrap("allow", reason)
 
 
-def format_ask(reason):
+def format_ask(reason, event_name="PreToolUse"):
     """生成 Claude Code ask 响应（请求用户确认）。"""
-    return _wrap("ask", reason)
+    return _wrap("ask", reason, event_name)
 
 
-def format_additional_context(context):
+def format_additional_context(context, event_name="PostToolUse"):
     """生成 Claude Code systemMessage 响应（注入上下文但不阻止）。
 
     Claude Code 通过 systemMessage 字段注入额外上下文。
@@ -56,7 +55,7 @@ def format_additional_context(context):
     return {
         "systemMessage": context,
         "hookSpecificOutput": {
-            "hookEventName": "PostToolUse",
+            "hookEventName": event_name,
             "permissionDecision": "allow"
         }
     }

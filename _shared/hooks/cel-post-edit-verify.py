@@ -105,7 +105,7 @@ def main():
     tool_input = data.get('tool_input', data.get('input', {}))
 
     # 只在文件修改类工具后触发（使用平台特定的工具名集合）
-    if tool_name.lower() not in EDIT_TOOLS:
+    if tool_name not in EDIT_TOOLS and tool_name.lower() not in {t.lower() for t in EDIT_TOOLS}:
         output(format_allow())
 
     filepath = tool_input.get('filePath', tool_input.get('path', tool_input.get('file', '')))

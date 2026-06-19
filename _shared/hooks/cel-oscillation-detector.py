@@ -139,13 +139,15 @@ def main():
     if is_oscillating:
         output(format_deny(
             f"[CEL 震荡检测] {oscillation_reason}。"
-            f"请停止当前方向，总结冲突并请求用户决策。"
+            f"请停止当前方向，总结冲突并请求用户决策。",
+            event_name="PostToolUse",
         ))
 
     if no_improvement:
         output(format_deny(
             f"[CEL 震荡检测] 连续 {consecutive} 轮无改进（上限 {MAX_NO_IMPROVEMENT}）。"
-            f"请停止当前方向，尝试不同的策略或请求用户确认。"
+            f"请停止当前方向，尝试不同的策略或请求用户确认。",
+            event_name="PostToolUse",
         ))
 
     # 正常放行，注入状态提醒

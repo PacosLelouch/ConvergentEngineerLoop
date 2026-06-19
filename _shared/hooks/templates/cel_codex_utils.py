@@ -5,6 +5,17 @@
 - 状态文件读写（load_state/save_state）
 - CEL 激活检查（is_cel_active）
 - 平台特定工具名集合（EDIT_TOOLS/COMMAND_TOOLS）
+
+Codex Hook 输出格式规范：
+- PreToolUse deny: {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": "..."}}
+- PreToolUse allow + 上下文: {"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": "..."}}
+- PostToolUse 上下文: {"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": "..."}}
+- 旧版格式也可用: {"decision": "block", "reason": "..."} 或 exit code 2 + stderr
+
+Codex 工具名规范：
+- 文件修改：Edit, Write, apply_patch（Edit|Write 可匹配 apply_patch）
+- 命令执行：Bash
+- 工具输入：Bash 的命令在 tool_input.command，apply_patch 的内容在 tool_input
 """
 
 import json
@@ -12,42 +23,59 @@ import os
 import sys
 
 
-# 本平台被 hook 拦截的文件修改工具名
-# TODO: 确认 Codex 的精确工具名后缩小范围
-EDIT_TOOLS = {'edit', 'write'}
+# Codex 工具名（官方规范，区分大小写）
+EDIT_TOOLS = {'Edit', 'Write', 'apply_patch'}
 
-# 本平台被 hook 拦截的命令执行工具名
-COMMAND_TOOLS = {'shell', 'run_command'}
+# 命令执行工具名
+COMMAND_TOOLS = {'Bash'}
 
 
-def format_deny(reason):
+def format_deny(reason, event_name="PreToolUse"):
     """生成 Codex deny 响应。"""
-    return {"permissionDecision": "deny", "reason": reason}
+    return {
+        "hookSpecificOutput": {
+            "hookEventName": event_name,
+            "permissionDecision": "deny",
+            "permissionDecisionReason": reason,
+        }
+    }
 
 
 def format_allow(reason=""):
-    """生成 Codex allow 响应。"""
-    result = {"permissionDecision": "allow"}
-    if reason:
-        result["reason"] = reason
-    return result
+    """生成 Codex allow 响应（默认不输出任何内容即可放行）。"""
+    # Codex: 退出码 0 且无输出 = 成功放行
+    # 但为了与其他平台统一，仍输出一个空 JSON
+    return {}
 
 
-def format_ask(reason):
+def format_ask(reason, event_name="PreToolUse"):
     """生成 Codex ask 响应。
 
     Codex 不支持 ask 决策，降级为 deny 并标注需用户确认。
     """
-    return {"permissionDecision": "deny", "reason": f"[需用户确认] {reason}"}
+    return {
+        "hookSpecificOutput": {
+            "hookEventName": event_name,
+            "permissionDecision": "deny",
+            "permissionDecisionReason": f"[需用户确认] {reason}",
+        }
+    }
 
 
-def format_additional_context(context):
+def format_additional_context(context, event_name="PostToolUse"):
     """生成 Codex additionalContext 响应（注入上下文但不阻止）。"""
-    return {"additionalContext": context}
+    return {
+        "hookSpecificOutput": {
+            "hookEventName": event_name,
+            "additionalContext": context,
+        }
+    }
 
 
-# 状态文件路径
-STATE_FILE = os.path.join(os.getcwd(), '.codex', 'cel-state.json')
+# 状态文件路径：使用脚本所在目录的上级 .codex 目录
+# Codex hook 以会话 cwd 运行，但 __file__ 更可靠
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+STATE_FILE = os.path.join(_SCRIPT_DIR, '..', 'cel-state.json')
 
 
 def output(result):
@@ -58,16 +86,18 @@ def output(result):
 
 def load_state():
     """加载 CEL 状态文件。"""
-    if os.path.exists(STATE_FILE):
-        with open(STATE_FILE, 'r', encoding='utf-8') as f:
+    state_path = os.path.normpath(STATE_FILE)
+    if os.path.exists(state_path):
+        with open(state_path, 'r', encoding='utf-8') as f:
             return json.load(f)
     return {"version": 1, "task": {}, "current_iteration": 0, "iterations": []}
 
 
 def save_state(state):
     """保存 CEL 状态文件。"""
-    os.makedirs(os.path.dirname(STATE_FILE), exist_ok=True)
-    with open(STATE_FILE, 'w', encoding='utf-8') as f:
+    state_path = os.path.normpath(STATE_FILE)
+    os.makedirs(os.path.dirname(state_path), exist_ok=True)
+    with open(state_path, 'w', encoding='utf-8') as f:
         json.dump(state, f, ensure_ascii=False, indent=2)
 
 
