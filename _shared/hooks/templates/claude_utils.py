@@ -1,4 +1,3 @@
-# 由 sync-platforms.py 自动生成，修改请改 _shared/hooks/templates/ 下的真源
 """Claude Code 平台的 Hook 输出格式适配器。"""
 
 import json

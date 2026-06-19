@@ -2,6 +2,14 @@
 
 本文档详细描述如何使用 CEL 系统指导项目迭代，覆盖三个平台：CodeBuddy、Codex、Claude Code。
 
+## 前置条件
+
+- **Python 3.8+**：Hook 脚本用 Python 编写，需要系统 PATH 中有 `python` 命令
+  - Windows：安装 Python 时勾选 "Add Python to PATH"
+  - macOS/Linux：`python3 --version` 可用时，可创建软链接 `sudo ln -s $(which python3) /usr/local/bin/python`
+  - 验证：在终端运行 `python --version`，应输出 Python 3.8+
+- **Git Bash**（仅 Windows + CodeBuddy 用户）：在 CodeBuddy 设置 → Hooks → 高级设置中，将执行器配置为 `C:\Program Files\Git\bin\bash.exe`
+
 ## 系统架构
 
 CEL 由三层组成：
@@ -44,7 +52,6 @@ CEL 由三层组成：
 2. **Skills 生效**：Codex 自动加载 `.agents/skills/` 下的技能
 
 3. **Hooks 生效**：`.codex/config.toml` 中配置的 Hook 自动执行
-   - Windows 用户：Hook 命令使用 `commandWindows` 配置
 
 4. **Agents 使用**：`.codex/agents/` 下的 TOML 格式 agent 定义
 

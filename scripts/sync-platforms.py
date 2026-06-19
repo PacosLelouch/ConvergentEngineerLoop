@@ -22,8 +22,8 @@ import yaml
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SHARED_DIR = os.path.join(ROOT_DIR, '_shared')
 
-# 生成物头部标注
-AUTO_GENERATED_HEADER = '# 由 sync-platforms.py 自动生成，修改请改 _shared/ 下的真源\n'
+
+
 
 
 def ensure_dir(path):
@@ -38,19 +38,10 @@ def clean_dir(path):
     ensure_dir(path)
 
 
-def copy_file(src, dst, add_header=False):
-    """复制文件，可选添加自动生成头部。"""
+def copy_file(src, dst):
+    """复制文件。"""
     ensure_dir(os.path.dirname(dst))
-    if add_header and src.endswith('.py'):
-        with open(src, 'r', encoding='utf-8') as f:
-            content = f.read()
-        # 如果文件已有自动生成头部，先移除
-        if content.startswith('# 由 sync-platforms.py 自动生成'):
-            content = content[len(AUTO_GENERATED_HEADER):]
-        with open(dst, 'w', encoding='utf-8') as f:
-            f.write(AUTO_GENERATED_HEADER + content)
-    else:
-        shutil.copy2(src, dst)
+    shutil.copy2(src, dst)
 
 
 def copy_dir(src, dst):
@@ -127,7 +118,7 @@ def generate_codex_agent(agent_name, agents_meta):
         merged['name'] = agent_name
 
     # 生成 TOML
-    lines = [AUTO_GENERATED_HEADER.rstrip()]
+    lines = ['# 由 sync-platforms.py 自动生成，修改请改 _shared/ 下的真源']
 
     # 简单字段
     for key in ['name', 'description']:
@@ -172,11 +163,10 @@ def generate_folders(output_dir):
     codebuddy_hooks = os.path.join(codebuddy_dir, 'hooks')
     ensure_dir(codebuddy_hooks)
     for hook in ['pre-edit-guard.py', 'dangerous-command-guard.py', 'post-edit-verify.py', 'oscillation-detector.py']:
-        copy_file(os.path.join(shared_hooks, hook), os.path.join(codebuddy_hooks, hook), add_header=True)
+        copy_file(os.path.join(shared_hooks, hook), os.path.join(codebuddy_hooks, hook))
     copy_file(
         os.path.join(shared_hooks, 'templates', 'codebuddy_utils.py'),
         os.path.join(codebuddy_hooks, 'hook_utils.py'),
-        add_header=True,
     )
 
     # agents
@@ -204,11 +194,10 @@ def generate_folders(output_dir):
     codex_hooks = os.path.join(codex_dir, 'hooks')
     ensure_dir(codex_hooks)
     for hook in ['pre-edit-guard.py', 'dangerous-command-guard.py', 'post-edit-verify.py', 'oscillation-detector.py']:
-        copy_file(os.path.join(shared_hooks, hook), os.path.join(codex_hooks, hook), add_header=True)
+        copy_file(os.path.join(shared_hooks, hook), os.path.join(codex_hooks, hook))
     copy_file(
         os.path.join(shared_hooks, 'templates', 'codex_utils.py'),
         os.path.join(codex_hooks, 'hook_utils.py'),
-        add_header=True,
     )
 
     # .codex/agents
@@ -235,11 +224,10 @@ def generate_folders(output_dir):
     claude_hooks = os.path.join(claude_dir, 'hooks')
     ensure_dir(claude_hooks)
     for hook in ['pre-edit-guard.py', 'dangerous-command-guard.py', 'post-edit-verify.py', 'oscillation-detector.py']:
-        copy_file(os.path.join(shared_hooks, hook), os.path.join(claude_hooks, hook), add_header=True)
+        copy_file(os.path.join(shared_hooks, hook), os.path.join(claude_hooks, hook))
     copy_file(
         os.path.join(shared_hooks, 'templates', 'claude_utils.py'),
         os.path.join(claude_hooks, 'hook_utils.py'),
-        add_header=True,
     )
 
     # agents
@@ -262,29 +250,31 @@ def generate_folders(output_dir):
 
 def generate_codebuddy_settings(codebuddy_dir):
     """生成 CodeBuddy settings.json。"""
+    # 统一使用 python 而非 python3：Windows 上没有 python3，
+    # 而现代 Linux/macOS 的 Python 3.x 安装通常 python 和 python3 均可用。
     settings = {
         "hooks": {
             "PreToolUse": [
                 {
                     "matcher": "write_to_file|replace_in_file|edit_file|write|edit",
-                    "command": "python3 \"$CODEBUDDY_PROJECT_DIR/.codebuddy/hooks/pre-edit-guard.py\"",
+                    "command": "python \"$CODEBUDDY_PROJECT_DIR/.codebuddy/hooks/pre-edit-guard.py\"",
                     "description": "CEL 修改前守卫：检查最小修改原则"
                 },
                 {
                     "matcher": "execute_command|bash|shell|terminal|run_command",
-                    "command": "python3 \"$CODEBUDDY_PROJECT_DIR/.codebuddy/hooks/dangerous-command-guard.py\"",
+                    "command": "python \"$CODEBUDDY_PROJECT_DIR/.codebuddy/hooks/dangerous-command-guard.py\"",
                     "description": "CEL 危险命令拦截"
                 }
             ],
             "PostToolUse": [
                 {
                     "matcher": "write_to_file|replace_in_file|edit_file|write|edit",
-                    "command": "python3 \"$CODEBUDDY_PROJECT_DIR/.codebuddy/hooks/post-edit-verify.py\"",
+                    "command": "python \"$CODEBUDDY_PROJECT_DIR/.codebuddy/hooks/post-edit-verify.py\"",
                     "description": "CEL 修改后验证提醒"
                 },
                 {
                     "matcher": "write_to_file|replace_in_file|edit_file|write|edit",
-                    "command": "python3 \"$CODEBUDDY_PROJECT_DIR/.codebuddy/hooks/oscillation-detector.py\"",
+                    "command": "python \"$CODEBUDDY_PROJECT_DIR/.codebuddy/hooks/oscillation-detector.py\"",
                     "description": "CEL 震荡检测"
                 }
             ]
@@ -298,7 +288,7 @@ def generate_codebuddy_settings(codebuddy_dir):
 
 def generate_codex_config(codex_dir, agent_names):
     """生成 Codex config.toml。"""
-    lines = [AUTO_GENERATED_HEADER.rstrip(), '']
+    lines = ['# 由 sync-platforms.py 自动生成，修改请改 _shared/ 下的真源', '']
 
     # agents 配置
     lines.append('# Agent 定义')
@@ -311,27 +301,25 @@ def generate_codex_config(codex_dir, agent_names):
     # hooks 配置
     lines.append('# Hook 配置')
     lines.append('')
+    # 统一使用 python：Windows 上没有 python3，而现代 Linux/macOS
+    # 的 Python 3.x 安装通常 python 和 python3 均可用。
     lines.append('[hooks.PreToolUse]')
     lines.append('[[hooks.PreToolUse.matchers]]')
     lines.append('pattern = "write_to_file|replace_in_file|edit_file|write|edit"')
-    lines.append('command = "python3 .codex/hooks/pre-edit-guard.py"')
-    lines.append('commandWindows = "python .codex/hooks/pre-edit-guard.py"')
+    lines.append('command = "python .codex/hooks/pre-edit-guard.py"')
     lines.append('')
     lines.append('[[hooks.PreToolUse.matchers]]')
     lines.append('pattern = "execute_command|bash|shell|terminal|run_command"')
-    lines.append('command = "python3 .codex/hooks/dangerous-command-guard.py"')
-    lines.append('commandWindows = "python .codex/hooks/dangerous-command-guard.py"')
+    lines.append('command = "python .codex/hooks/dangerous-command-guard.py"')
     lines.append('')
     lines.append('[hooks.PostToolUse]')
     lines.append('[[hooks.PostToolUse.matchers]]')
     lines.append('pattern = "write_to_file|replace_in_file|edit_file|write|edit"')
-    lines.append('command = "python3 .codex/hooks/post-edit-verify.py"')
-    lines.append('commandWindows = "python .codex/hooks/post-edit-verify.py"')
+    lines.append('command = "python .codex/hooks/post-edit-verify.py"')
     lines.append('')
     lines.append('[[hooks.PostToolUse.matchers]]')
     lines.append('pattern = "write_to_file|replace_in_file|edit_file|write|edit"')
-    lines.append('command = "python3 .codex/hooks/oscillation-detector.py"')
-    lines.append('commandWindows = "python .codex/hooks/oscillation-detector.py"')
+    lines.append('command = "python .codex/hooks/oscillation-detector.py"')
 
     config_path = os.path.join(codex_dir, 'config.toml')
     with open(config_path, 'w', encoding='utf-8') as f:
@@ -340,29 +328,31 @@ def generate_codex_config(codex_dir, agent_names):
 
 def generate_claude_settings(claude_dir):
     """生成 Claude Code settings.json。"""
+    # 统一使用 python 而非 python3：Windows 上没有 python3，
+    # 而现代 Linux/macOS 的 Python 3.x 安装通常 python 和 python3 均可用。
     settings = {
         "hooks": {
             "PreToolUse": [
                 {
                     "matcher": "write_to_file|replace_in_file|edit_file|write|edit",
-                    "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/pre-edit-guard.py\"",
+                    "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/pre-edit-guard.py\"",
                     "description": "CEL 修改前守卫：检查最小修改原则"
                 },
                 {
                     "matcher": "execute_command|bash|shell|terminal|run_command",
-                    "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/dangerous-command-guard.py\"",
+                    "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/dangerous-command-guard.py\"",
                     "description": "CEL 危险命令拦截"
                 }
             ],
             "PostToolUse": [
                 {
                     "matcher": "write_to_file|replace_in_file|edit_file|write|edit",
-                    "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/post-edit-verify.py\"",
+                    "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/post-edit-verify.py\"",
                     "description": "CEL 修改后验证提醒"
                 },
                 {
                     "matcher": "write_to_file|replace_in_file|edit_file|write|edit",
-                    "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/oscillation-detector.py\"",
+                    "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/oscillation-detector.py\"",
                     "description": "CEL 震荡检测"
                 }
             ]
@@ -435,11 +425,10 @@ def generate_plugins(output_dir):
     claude_hooks = os.path.join(claude_plugin_dir, 'hooks')
     ensure_dir(claude_hooks)
     for hook in ['pre-edit-guard.py', 'dangerous-command-guard.py', 'post-edit-verify.py', 'oscillation-detector.py']:
-        copy_file(os.path.join(shared_hooks, hook), os.path.join(claude_hooks, hook), add_header=True)
+        copy_file(os.path.join(shared_hooks, hook), os.path.join(claude_hooks, hook))
     copy_file(
         os.path.join(shared_hooks, 'templates', 'claude_utils.py'),
         os.path.join(claude_hooks, 'hook_utils.py'),
-        add_header=True,
     )
 
     # agents
@@ -505,11 +494,10 @@ def generate_plugins(output_dir):
     codex_hooks = os.path.join(codex_dot_codex, 'hooks')
     ensure_dir(codex_hooks)
     for hook in ['pre-edit-guard.py', 'dangerous-command-guard.py', 'post-edit-verify.py', 'oscillation-detector.py']:
-        copy_file(os.path.join(shared_hooks, hook), os.path.join(codex_hooks, hook), add_header=True)
+        copy_file(os.path.join(shared_hooks, hook), os.path.join(codex_hooks, hook))
     copy_file(
         os.path.join(shared_hooks, 'templates', 'codex_utils.py'),
         os.path.join(codex_hooks, 'hook_utils.py'),
-        add_header=True,
     )
 
     # agents

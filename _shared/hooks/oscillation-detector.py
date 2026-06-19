@@ -1,4 +1,3 @@
-# 由 sync-platforms.py 自动生成，修改请改 _shared/hooks/ 下的真源
 """
 震荡检测 Hook。
 
