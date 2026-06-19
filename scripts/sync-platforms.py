@@ -338,12 +338,13 @@ def generate_claude_settings(claude_dir, merge=False):
         json.dump(settings, f, ensure_ascii=False, indent=2)
 
 
-def generate_codex_config(codex_dir, agent_names, merge=False):
+def generate_codex_config(codex_dir, agent_names, agents_meta, merge=False):
     """生成 Codex config.toml。
 
     Args:
         codex_dir: .codex 目录路径
         agent_names: agent 名称列表
+        agents_meta: agents.yaml 元数据 dict
         merge: 若为 True，读取已有 config.toml 并合并
     """
     config_path = os.path.join(codex_dir, 'config.toml')
@@ -352,16 +353,17 @@ def generate_codex_config(codex_dir, agent_names, merge=False):
     if merge and os.path.exists(config_path):
         with open(config_path, 'r', encoding='utf-8') as f:
             existing_content = f.read()
-        content = _merge_codex_toml(existing_content, agent_names, cel_hook_lines)
+        content = _merge_codex_toml(existing_content, agent_names, agents_meta, cel_hook_lines)
     else:
         # 全量生成
         lines = ['# 由 sync-platforms.py 自动生成，修改请改 _shared/ 下的真源', '']
-        # agents 配置
+        # agents 配置（使用 [agents.<name>] 命名子表格格式，Codex 不支持 [[agents]] 数组格式）
         lines.append('# CEL Agent 定义')
         for name in agent_names:
-            lines.append(f'[[agents]]')
-            lines.append(f'name = "{name}"')
-            lines.append(f'instruction_file = ".codex/agents/{name}.toml"')
+            desc = agents_meta.get('agents', {}).get(name, {}).get('description', name)
+            lines.append(f'[agents.{name}]')
+            lines.append(f'description = "{desc}"')
+            lines.append(f'config_file = ".codex/agents/{name}.toml"')
             lines.append('')
         # CEL hooks 配置
         lines.extend(cel_hook_lines)
@@ -387,13 +389,14 @@ def _read_toml_block(lines, start):
     return block, i
 
 
-def _merge_codex_toml(existing_content, agent_names, cel_hook_lines):
+def _merge_codex_toml(existing_content, agent_names, agents_meta, cel_hook_lines):
     """合并 Codex config.toml，保留非 CEL 内容，替换 CEL 内容。
 
     策略（基于内容识别，不依赖标记注释）：
     1. 逐块解析 TOML
     2. 移除 CEL 相关的块：
-       - [[agents]] 块中 name 以 "cel-" 开头的
+       - [agents.cel-*] 命名子表格（Codex 格式）
+       - [[agents]] 块中 name 以 "cel-" 开头的（旧版格式，兼容清理）
        - [[hooks.*.matchers]] 块中 command 含 "cel-" 的
        - [hooks.*] section header 如果后续无非 CEL 的 matchers
     3. 追加新的 CEL 内容
@@ -402,18 +405,21 @@ def _merge_codex_toml(existing_content, agent_names, cel_hook_lines):
     result = []
     i = 0
 
-    # 跟踪 [hooks.*] section header 位置，用于判断是否需要移除
-    pending_section_header_idx = None
-
     while i < len(lines):
         stripped = lines[i].strip()
 
-        # === 处理 [[agents]] 块 ===
+        # === 处理 [agents.cel-*] 命名子表格（Codex 正确格式） ===
+        if stripped.startswith('[agents.cel-') and not stripped.startswith('[['):
+            block, i = _read_toml_block(lines, i)
+            # CEL agent，移除
+            _remove_preceding_blank_and_comment(result)
+            continue
+
+        # === 处理 [[agents]] 块（旧版格式，兼容清理） ===
         if stripped == '[[agents]]':
             block, i = _read_toml_block(lines, i)
             is_cel = any('name = "cel-' in line or "name = 'cel-" in line for line in block)
             if is_cel:
-                # 跳过 CEL agent 块，同时清理前面的空行和注释
                 _remove_preceding_blank_and_comment(result)
                 continue
             result.extend(block)
@@ -424,7 +430,6 @@ def _merge_codex_toml(existing_content, agent_names, cel_hook_lines):
             block, i = _read_toml_block(lines, i)
             is_cel = any('cel-' in line or 'CEL' in line for line in block)
             if is_cel:
-                # 跳过 CEL hook matcher 块
                 _remove_preceding_blank_and_comment(result)
                 continue
             result.extend(block)
@@ -432,8 +437,6 @@ def _merge_codex_toml(existing_content, agent_names, cel_hook_lines):
 
         # === 处理 [hooks.*] section header ===
         if stripped.startswith('[hooks.') and not stripped.startswith('[['):
-            # 先暂存，看后续是否有非 CEL 的 matchers
-            # 如果后续全是 CEL matchers，则整个 section 都应移除
             pending_section_header_idx = len(result)
             result.append(lines[i])
             i += 1
@@ -453,7 +456,6 @@ def _merge_codex_toml(existing_content, agent_names, cel_hook_lines):
     _remove_empty_hook_sections(result)
 
     # 后处理：移除残留的 CEL 相关注释行
-    # _read_toml_block 会将注释吸入相邻块，需在此清理
     _cel_comment_set = {
         '# CEL Hook 配置', '# Hook 配置', '# CEL Agent 定义', '# Agent 定义',
     }
@@ -462,13 +464,14 @@ def _merge_codex_toml(existing_content, agent_names, cel_hook_lines):
     # 清理连续空行
     result = _collapse_blank_lines(result)
 
-    # 追加 CEL agents
+    # 追加 CEL agents（使用 [agents.<name>] 命名子表格格式）
     result.append('')
     result.append('# CEL Agent 定义')
     for name in agent_names:
-        result.append('[[agents]]')
-        result.append(f'name = "{name}"')
-        result.append(f'instruction_file = ".codex/agents/{name}.toml"')
+        desc = agents_meta.get('agents', {}).get(name, {}).get('description', name)
+        result.append(f'[agents.{name}]')
+        result.append(f'description = "{desc}"')
+        result.append(f'config_file = ".codex/agents/{name}.toml"')
         result.append('')
 
     # 追加 CEL hooks
@@ -666,7 +669,7 @@ def generate_folders(output_dir):
     _deploy_hooks(shared_hooks, os.path.join(codex_dir, 'hooks'), 'codex')
     _deploy_agents(os.path.join(codex_dir, 'agents'), agent_names, agents_meta, 'codex')
     copy_skill_dir(shared_skills, os.path.join(agents_dir, 'skills', 'convergent-engineering-loop'))
-    generate_codex_config(codex_dir, agent_names)
+    generate_codex_config(codex_dir, agent_names, agents_meta)
     generate_initial_state(codex_dir)
 
     # ========== ClaudeCode ==========
@@ -777,7 +780,7 @@ def generate_plugins(output_dir):
     _deploy_agents(os.path.join(codex_dot_codex, 'agents'), agent_names, agents_meta, 'codex')
 
     # config.toml
-    generate_codex_config(codex_dot_codex, agent_names)
+    generate_codex_config(codex_dot_codex, agent_names, agents_meta)
 
     # .agents/skills
     copy_skill_dir(shared_skills, os.path.join(codex_plugin_dir, '.agents', 'skills', 'convergent-engineering-loop'))
@@ -876,7 +879,7 @@ def _install_codex(codex_dir, agents_dir, shared_hooks, shared_skills, agent_nam
     _deploy_hooks(shared_hooks, os.path.join(codex_dir, 'hooks'), 'codex')
     _deploy_agents(os.path.join(codex_dir, 'agents'), agent_names, agents_meta, 'codex')
     copy_skill_dir(shared_skills, os.path.join(agents_dir, 'skills', 'convergent-engineering-loop'))
-    generate_codex_config(codex_dir, agent_names, merge=True)
+    generate_codex_config(codex_dir, agent_names, agents_meta, merge=True)
     state_path = os.path.join(codex_dir, 'cel-state.json')
     if not os.path.exists(state_path):
         generate_initial_state(codex_dir)
