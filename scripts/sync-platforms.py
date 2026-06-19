@@ -118,7 +118,11 @@ def generate_codebuddy_agent(agent_name, agents_meta):
 
 
 def generate_codex_agent(agent_name, agents_meta):
-    """生成 Codex 格式的 agent（TOML）。"""
+    """生成 Codex 格式的 agent（TOML）。
+
+    Codex 自动扫描 .codex/agents/*.toml，无需在 config.toml 注册。
+    必需字段：name、description、developer_instructions。
+    """
     instruction = read_agent_instruction(agent_name)
     meta = agents_meta.get('agents', {}).get(agent_name, {})
 
@@ -145,8 +149,8 @@ def generate_codex_agent(agent_name, agents_meta):
             val = merged[key].replace('"', '\\"')
             lines.append(f'{key} = "{val}"')
 
-    # instruction 字段（多行字符串）
-    lines.append(f'instruction = """')
+    # developer_instructions 字段（多行字符串，Codex subagent 必需）
+    lines.append(f'developer_instructions = """')
     lines.append(instruction)
     lines.append('"""')
 
@@ -245,62 +249,66 @@ def build_cel_hooks_claude():
 
 
 def build_cel_hooks_codex():
-    """构建 Codex 平台的 CEL hooks 配置（TOML 格式行列表）。
+    """构建 Codex 平台的 CEL hooks 配置（JSON 格式 dict）。
 
-    Codex hooks TOML 格式要求：
-    - [[hooks.PreToolUse]] 定义事件组，matcher 为正则表达式
-    - [[hooks.PreToolUse.hooks]] 定义该 matcher 下的 hook handler
-    - handler 必须有 type = "command"
+    Codex hooks.json 格式要求：
+    - 每个事件类型下是 matcher group 列表
+    - 每个 matcher group 包含 matcher（正则）和 hooks（handler 列表）
+    - handler 必须有 type = "command"，以及 command、timeout、statusMessage
     - 命令推荐使用 git root 绝对路径
     """
     edit_matcher = PLATFORM_EDIT_MATCHERS['codex']
     cmd_matcher = PLATFORM_COMMAND_MATCHERS['codex']
-    lines = []
-    lines.append('# CEL Hook 配置')
-
-    # PreToolUse: 修改前守卫
-    lines.append('[[hooks.PreToolUse]]')
-    lines.append(f'matcher = "{edit_matcher}"')
-    lines.append('')
-    lines.append('[[hooks.PreToolUse.hooks]]')
-    lines.append('type = "command"')
-    lines.append('command = "python .codex/hooks/cel-pre-edit-guard.py"')
-    lines.append('timeout = 30')
-    lines.append('statusMessage = "CEL: Checking minimal edit principle"')
-    lines.append('')
-
-    # PreToolUse: 危险命令拦截
-    lines.append('[[hooks.PreToolUse]]')
-    lines.append(f'matcher = "{cmd_matcher}"')
-    lines.append('')
-    lines.append('[[hooks.PreToolUse.hooks]]')
-    lines.append('type = "command"')
-    lines.append('command = "python .codex/hooks/cel-dangerous-command-guard.py"')
-    lines.append('timeout = 30')
-    lines.append('statusMessage = "CEL: Checking dangerous command"')
-    lines.append('')
-
-    # PostToolUse: 修改后验证提醒
-    lines.append('[[hooks.PostToolUse]]')
-    lines.append(f'matcher = "{edit_matcher}"')
-    lines.append('')
-    lines.append('[[hooks.PostToolUse.hooks]]')
-    lines.append('type = "command"')
-    lines.append('command = "python .codex/hooks/cel-post-edit-verify.py"')
-    lines.append('timeout = 30')
-    lines.append('statusMessage = "CEL: Post-edit verification"')
-    lines.append('')
-
-    # PostToolUse: 震荡检测
-    lines.append('[[hooks.PostToolUse]]')
-    lines.append(f'matcher = "{edit_matcher}"')
-    lines.append('')
-    lines.append('[[hooks.PostToolUse.hooks]]')
-    lines.append('type = "command"')
-    lines.append('command = "python .codex/hooks/cel-oscillation-detector.py"')
-    lines.append('timeout = 30')
-    lines.append('statusMessage = "CEL: Oscillation detection"')
-    return lines
+    return {
+        "PreToolUse": [
+            {
+                "matcher": edit_matcher,
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": 'python "$(git rev-parse --show-toplevel)/.codex/hooks/cel-pre-edit-guard.py"',
+                        "timeout": 30,
+                        "statusMessage": f"{CEL_HOOK_PREFIX}Checking minimal edit principle"
+                    }
+                ]
+            },
+            {
+                "matcher": cmd_matcher,
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": 'python "$(git rev-parse --show-toplevel)/.codex/hooks/cel-dangerous-command-guard.py"',
+                        "timeout": 30,
+                        "statusMessage": f"{CEL_HOOK_PREFIX}Checking dangerous command"
+                    }
+                ]
+            }
+        ],
+        "PostToolUse": [
+            {
+                "matcher": edit_matcher,
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": 'python "$(git rev-parse --show-toplevel)/.codex/hooks/cel-post-edit-verify.py"',
+                        "timeout": 30,
+                        "statusMessage": f"{CEL_HOOK_PREFIX}Post-edit verification"
+                    }
+                ]
+            },
+            {
+                "matcher": edit_matcher,
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": 'python "$(git rev-parse --show-toplevel)/.codex/hooks/cel-oscillation-detector.py"',
+                        "timeout": 30,
+                        "statusMessage": f"{CEL_HOOK_PREFIX}Oscillation detection"
+                    }
+                ]
+            }
+        ]
+    }
 
 
 # ============================================================
@@ -368,39 +376,86 @@ def generate_claude_settings(claude_dir, merge=False):
         json.dump(settings, f, ensure_ascii=False, indent=2)
 
 
-def generate_codex_config(codex_dir, agent_names, agents_meta, merge=False):
-    """生成 Codex config.toml。
+def generate_codex_config(codex_dir, merge=False):
+    """生成/清理 Codex config.toml。
+
+    Codex 自动扫描 .codex/agents/*.toml，无需在 config.toml 注册 agent。
+    hooks 配置使用独立的 hooks.json 文件。
+    config.toml 仅用于全局配置（如 [agents] max_threads/max_depth）。
+
+    此函数的主要作用：
+    - 全量模式：生成空的最小 config.toml
+    - 合并模式：清理旧版 CEL 残留（[agents.cel-*] 注册块、[[hooks.*]] 内联 hooks）
 
     Args:
         codex_dir: .codex 目录路径
-        agent_names: agent 名称列表
-        agents_meta: agents.yaml 元数据 dict
-        merge: 若为 True，读取已有 config.toml 并合并
+        merge: 若为 True，读取已有 config.toml 并清理 CEL 残留
     """
     config_path = os.path.join(codex_dir, 'config.toml')
-    cel_hook_lines = build_cel_hooks_codex()
 
     if merge and os.path.exists(config_path):
         with open(config_path, 'r', encoding='utf-8') as f:
             existing_content = f.read()
-        content = _merge_codex_toml(existing_content, agent_names, agents_meta, cel_hook_lines)
+        content = _clean_codex_toml(existing_content)
+        # 如果清理后内容为空或只有注释，写入最小文件（保留注释供用户参考）
+        stripped = content.strip()
+        if not stripped or all(line.strip().startswith('#') or line.strip() == '' for line in stripped.split('\n')):
+            content = '# 由 sync-platforms.py 自动生成，修改请改 _shared/ 下的真源\n'
     else:
-        # 全量生成
-        lines = ['# 由 sync-platforms.py 自动生成，修改请改 _shared/ 下的真源', '']
-        # agents 配置（使用 [agents.<name>] 命名子表格格式，Codex 不支持 [[agents]] 数组格式）
-        lines.append('# CEL Agent 定义')
-        for name in agent_names:
-            desc = agents_meta.get('agents', {}).get(name, {}).get('description', name)
-            lines.append(f'[agents.{name}]')
-            lines.append(f'description = "{desc}"')
-            lines.append(f'config_file = ".codex/agents/{name}.toml"')
-            lines.append('')
-        # CEL hooks 配置
-        lines.extend(cel_hook_lines)
-        content = '\n'.join(lines) + '\n'
+        # 全量模式：生成最小 config.toml（仅注释）
+        content = '# 由 sync-platforms.py 自动生成，修改请改 _shared/ 下的真源\n'
 
     with open(config_path, 'w', encoding='utf-8') as f:
         f.write(content)
+
+
+def _merge_codex_hooks_json(settings, cel_hooks):
+    """将 CEL hooks 合并到已有的 Codex hooks.json 中。
+
+    Codex hooks.json 格式与 CodeBuddy/Claude 不同：
+    每个事件类型下是 matcher group 列表，每个 group 包含 matcher + hooks 列表。
+    按 statusMessage 前缀识别旧版 CEL hooks，先移除再追加。
+    """
+    settings.setdefault('hooks', {})
+    # 收集所有涉及的事件类型（已有的 + CEL 新增的）
+    all_events = set(settings['hooks'].keys()) | set(cel_hooks.keys())
+    for event in all_events:
+        settings['hooks'].setdefault(event, [])
+        # 移除旧版 CEL hooks：检查 matcher group 中是否有 CEL handler
+        settings['hooks'][event] = [
+            group for group in settings['hooks'][event]
+            if not any(
+                h.get('statusMessage', '').startswith(CEL_HOOK_PREFIX)
+                for h in group.get('hooks', [])
+            )
+        ]
+        # 追加当前版本
+        settings['hooks'][event].extend(cel_hooks.get(event, []))
+    return settings
+
+
+def generate_codex_hooks_json(codex_dir, merge=False):
+    """生成 Codex hooks.json。
+
+    hooks 配置独立于 config.toml，符合 Codex 官方建议：
+    "Prefer one representation per layer"。
+
+    Args:
+        codex_dir: .codex 目录路径
+        merge: 若为 True，读取已有 hooks.json 并合并（不覆盖其他系统的 hooks）
+    """
+    hooks_path = os.path.join(codex_dir, 'hooks.json')
+    cel_hooks = build_cel_hooks_codex()
+
+    if merge and os.path.exists(hooks_path):
+        with open(hooks_path, 'r', encoding='utf-8') as f:
+            settings = json.load(f)
+        settings = _merge_codex_hooks_json(settings, cel_hooks)
+    else:
+        settings = {'hooks': cel_hooks}
+
+    with open(hooks_path, 'w', encoding='utf-8') as f:
+        json.dump(settings, f, ensure_ascii=False, indent=2)
 
 
 def _read_toml_block(lines, start):
@@ -419,19 +474,18 @@ def _read_toml_block(lines, start):
     return block, i
 
 
-def _merge_codex_toml(existing_content, agent_names, agents_meta, cel_hook_lines):
-    """合并 Codex config.toml，保留非 CEL 内容，替换 CEL 内容。
+def _clean_codex_toml(existing_content):
+    """清理 Codex config.toml 中的 CEL 残留，保留非 CEL 内容。
 
-    策略（基于内容识别，不依赖标记注释）：
-    1. 逐块解析 TOML
-    2. 移除 CEL 相关的块：
-       - [agents.cel-*] 命名子表格（Codex 格式）
-       - [[agents]] 块中 name 以 "cel-" 开头的（旧版格式，兼容清理）
-       - [[hooks.*]] 事件组块中 command 含 "cel-" 的
-       - [[hooks.*.hooks]] handler 块中 command 含 "cel-" 的
-       - [[hooks.*.matchers]] 旧格式块中 command 含 "cel-" 的
-       - 空的 [hooks.*] section（删除 CEL 后无剩余 handler）
-    3. 追加新的 CEL 内容
+    Codex 自动扫描 .codex/agents/*.toml，无需在 config.toml 注册 agent。
+    此函数仅做清理，不追加新内容。
+
+    清理范围：
+    1. [agents.cel-*] 命名子表格（旧版注册格式）
+    2. [[agents]] 块中 name 以 "cel-" 开头的（更旧版格式）
+    3. [[hooks.*]] 内联 hooks 块（迁移到 hooks.json 后的残留）
+    4. 孤立的 [[hooks.*]] matcher 头（hooks 子块已被移除）
+    5. CEL 相关注释行
     """
     lines = existing_content.split('\n')
     result = []
@@ -440,13 +494,13 @@ def _merge_codex_toml(existing_content, agent_names, agents_meta, cel_hook_lines
     while i < len(lines):
         stripped = lines[i].strip()
 
-        # === 处理 [agents.cel-*] 命名子表格（Codex 正确格式） ===
+        # === 处理 [agents.cel-*] 命名子表格（旧版注册格式） ===
         if stripped.startswith('[agents.cel-') and not stripped.startswith('[['):
             block, i = _read_toml_block(lines, i)
             _remove_preceding_blank_and_comment(result)
             continue
 
-        # === 处理 [[agents]] 块（旧版格式，兼容清理） ===
+        # === 处理 [[agents]] 块（更旧版格式，兼容清理） ===
         if stripped == '[[agents]]':
             block, i = _read_toml_block(lines, i)
             is_cel = any('name = "cel-' in line or "name = 'cel-" in line for line in block)
@@ -456,32 +510,8 @@ def _merge_codex_toml(existing_content, agent_names, agents_meta, cel_hook_lines
             result.extend(block)
             continue
 
-        # === 处理 [[hooks.*.hooks]] handler 块（Codex 新格式） ===
-        if stripped.startswith('[[hooks.') and '.hooks]]' in stripped:
-            block, i = _read_toml_block(lines, i)
-            is_cel = any('cel-' in line for line in block)
-            if is_cel:
-                _remove_preceding_blank_and_comment(result)
-                continue
-            result.extend(block)
-            continue
-
-        # === 处理 [[hooks.*]] 事件组块（Codex 新格式） ===
-        # 仅含 matcher 的一行块，检查后续是否紧跟 .hooks
-        if stripped.startswith('[[hooks.') and ']]' in stripped and '.hooks]]' not in stripped:
-            block, i = _read_toml_block(lines, i)
-            # 如果这个 matcher 组只有 matcher 行（没有 hooks 子块），
-            # 说明它的 hooks 已被移除，跳过
-            has_more_than_header = len([l for l in block if l.strip() and not l.strip().startswith('#')]) > 1
-            has_cel_matcher = any('cel-' in line for line in block)
-            if has_cel_matcher or not has_more_than_header:
-                _remove_preceding_blank_and_comment(result)
-                continue
-            result.extend(block)
-            continue
-
-        # === 处理 [[hooks.*.matchers]] 块（旧格式，兼容清理） ===
-        if stripped.startswith('[[hooks.') and 'matchers]]' in stripped:
+        # === 处理 [[hooks.*]] 内联 hooks 块（迁移残留清理） ===
+        if stripped.startswith('[[hooks.'):
             block, i = _read_toml_block(lines, i)
             is_cel = any('cel-' in line or 'CEL' in line for line in block)
             if is_cel:
@@ -490,16 +520,9 @@ def _merge_codex_toml(existing_content, agent_names, agents_meta, cel_hook_lines
             result.extend(block)
             continue
 
-        # === 处理 [hooks.*] section header（旧格式，兼容清理） ===
-        if stripped.startswith('[hooks.') and not stripped.startswith('[['):
-            pending_section_header_idx = len(result)
-            result.append(lines[i])
-            i += 1
-            continue
-
         # === 跳过 CEL 相关注释 ===
         if stripped in ('# CEL Hook 配置', '# Hook 配置', '# CEL Agent 定义',
-                        '# Agent 定义', '# CEL Agent 定义'):
+                        '# Agent 定义'):
             i += 1
             continue
 
@@ -507,30 +530,17 @@ def _merge_codex_toml(existing_content, agent_names, agents_meta, cel_hook_lines
         result.append(lines[i])
         i += 1
 
-    # 检查空的 [hooks.*] section（只有 header 没有后续内容）
-    _remove_empty_hook_sections(result)
-
     # 后处理：移除残留的 CEL 相关注释行
     _cel_comment_set = {
         '# CEL Hook 配置', '# Hook 配置', '# CEL Agent 定义', '# Agent 定义',
     }
     result = [line for line in result if line.strip() not in _cel_comment_set]
 
+    # 后处理：清理孤立的 [[hooks.*]] matcher 头（其 .hooks 子块已被移除）
+    result = _remove_orphan_hook_matchers(result)
+
     # 清理连续空行
     result = _collapse_blank_lines(result)
-
-    # 追加 CEL agents（使用 [agents.<name>] 命名子表格格式）
-    result.append('')
-    result.append('# CEL Agent 定义')
-    for name in agent_names:
-        desc = agents_meta.get('agents', {}).get(name, {}).get('description', name)
-        result.append(f'[agents.{name}]')
-        result.append(f'description = "{desc}"')
-        result.append(f'config_file = ".codex/agents/{name}.toml"')
-        result.append('')
-
-    # 追加 CEL hooks
-    result.extend(cel_hook_lines)
 
     return '\n'.join(result) + '\n'
 
@@ -542,29 +552,61 @@ def _remove_preceding_blank_and_comment(lines):
         if stripped == '':
             lines.pop()
         elif stripped in ('# CEL Hook 配置', '# Hook 配置', '# CEL Agent 定义',
-                          '# Agent 定义', '# CEL Agent 定义'):
+                          '# Agent 定义'):
             lines.pop()
         else:
             break
 
 
-def _remove_empty_hook_sections(lines):
-    """移除空的 [hooks.*] section header（后续没有 [[hooks.*.matchers]] 块）。"""
+def _remove_orphan_hook_matchers(lines):
+    """移除孤立的 [[hooks.*]] matcher 头。
+
+    当 CEL 的 [[hooks.*.hooks]] 子块被移除后，其父级 [[hooks.*]] matcher 头
+    可能变成孤立项（没有后续的 .hooks 块）。此函数清理这些孤立的 matcher 头。
+    """
+    result = []
     i = 0
     while i < len(lines):
         stripped = lines[i].strip()
-        if stripped.startswith('[hooks.') and not stripped.startswith('[['):
-            # 检查后续行：如果下一个非空行不是 [[hooks.*.matchers]]，则此 section 为空
+        # 检测 [[hooks.*]] matcher 头（非 .hooks 子块）
+        if (stripped.startswith('[[hooks.') and ']]' in stripped
+                and '.hooks]]' not in stripped):
+            # 读取整个 matcher 块（可能包含 matcher = "..." 行和空行）
+            matcher_block = [lines[i]]
             j = i + 1
-            while j < len(lines) and lines[j].strip() == '':
-                j += 1
-            if j >= len(lines) or not (lines[j].strip().startswith('[[hooks.') and 'matchers]]' in lines[j].strip()):
-                # 空 section，移除 header 及后续空行
-                lines.pop(i)
-                while i < len(lines) and lines[i].strip() == '':
-                    lines.pop(i)
-                continue
-        i += 1
+            while j < len(lines):
+                s = lines[j].strip()
+                # 遇到新的节头或非空非键值行，停止
+                if s.startswith('[[') or (s.startswith('[') and not s.startswith('[[')):
+                    break
+                # 空行或 matcher= 键值行属于这个块
+                if s == '' or s.startswith('matcher') or s.startswith('#'):
+                    matcher_block.append(lines[j])
+                    j += 1
+                    continue
+                break
+            # 检查后续是否紧跟 [[hooks.*.hooks]] 块
+            # 跳过空行查找
+            k = j
+            while k < len(lines) and lines[k].strip() == '':
+                k += 1
+            has_hooks_block = (k < len(lines)
+                               and lines[k].strip().startswith('[[hooks.')
+                               and '.hooks]]' in lines[k].strip())
+            if has_hooks_block:
+                # 有后续 hooks 块，保留 matcher 头
+                result.extend(matcher_block)
+                i = j
+            else:
+                # 无后续 hooks 块，跳过（孤立 matcher 头）
+                i = j
+                # 同时移除前方空行
+                while result and result[-1].strip() == '':
+                    result.pop()
+        else:
+            result.append(lines[i])
+            i += 1
+    return result
 
 
 def _collapse_blank_lines(lines):
@@ -724,7 +766,8 @@ def generate_folders(output_dir):
     _deploy_hooks(shared_hooks, os.path.join(codex_dir, 'hooks'), 'codex')
     _deploy_agents(os.path.join(codex_dir, 'agents'), agent_names, agents_meta, 'codex')
     copy_skill_dir(shared_skills, os.path.join(agents_dir, 'skills', 'convergent-engineering-loop'))
-    generate_codex_config(codex_dir, agent_names, agents_meta)
+    generate_codex_config(codex_dir)
+    generate_codex_hooks_json(codex_dir)
     generate_initial_state(codex_dir)
 
     # ========== ClaudeCode ==========
@@ -835,7 +878,10 @@ def generate_plugins(output_dir):
     _deploy_agents(os.path.join(codex_dot_codex, 'agents'), agent_names, agents_meta, 'codex')
 
     # config.toml
-    generate_codex_config(codex_dot_codex, agent_names, agents_meta)
+    generate_codex_config(codex_dot_codex)
+
+    # hooks.json
+    generate_codex_hooks_json(codex_dot_codex)
 
     # .agents/skills
     copy_skill_dir(shared_skills, os.path.join(codex_plugin_dir, '.agents', 'skills', 'convergent-engineering-loop'))
@@ -934,7 +980,8 @@ def _install_codex(codex_dir, agents_dir, shared_hooks, shared_skills, agent_nam
     _deploy_hooks(shared_hooks, os.path.join(codex_dir, 'hooks'), 'codex')
     _deploy_agents(os.path.join(codex_dir, 'agents'), agent_names, agents_meta, 'codex')
     copy_skill_dir(shared_skills, os.path.join(agents_dir, 'skills', 'convergent-engineering-loop'))
-    generate_codex_config(codex_dir, agent_names, agents_meta, merge=True)
+    generate_codex_config(codex_dir, merge=True)
+    generate_codex_hooks_json(codex_dir, merge=True)
     state_path = os.path.join(codex_dir, 'cel-state.json')
     if not os.path.exists(state_path):
         generate_initial_state(codex_dir)

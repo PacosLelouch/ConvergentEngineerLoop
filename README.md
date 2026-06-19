@@ -95,8 +95,9 @@ CodeBuddy/                  # CodeBuddy 文件夹包
 Codex/                      # Codex 文件夹包
 ├── .codex/
 │   ├── hooks/              # Hook 脚本 + cel_hook_utils.py（Codex 版）
-│   ├── agents/             # TOML 格式
-│   ├── config.toml         # Agent + Hook 配置
+│   ├── agents/             # TOML 格式（Codex 自动扫描，无需注册）
+│   ├── hooks.json          # Hook 配置
+│   ├── config.toml         # 全局配置（不含 agent 注册）
 │   └── cel-state.json      # 初始状态
 └── .agents/
     └── skills/             # SKILL.md + references + templates + checklists
@@ -277,7 +278,7 @@ python scripts/sync-platforms.py --install /path/to/project --platform all
 
 1. **确认 Python 可用**：在终端运行 `python --version`，确保输出 Python 3.8+
 2. **CodeBuddy Windows 用户**：在设置 → Hooks → 高级设置中配置执行器为 Git Bash（如 `C:\Program Files\Git\bin\bash.exe`）
-3. **确认 Hook 配置存在**：检查 `.codebuddy/settings.json` / `.claude/settings.json` / `.codex/config.toml` 中的 hooks 配置
+3. **确认 Hook 配置存在**：检查 `.codebuddy/settings.json` / `.claude/settings.json` / `.codex/hooks.json` 中的 hooks 配置
 4. **查看 Hook 日志**：CodeBuddy 插件设置中有 Hooks 选项卡，可查看执行日志和错误信息
 
 ### Hook 执行报错

@@ -69,9 +69,9 @@ python scripts/sync-platforms.py --install /path/to/project --platform all
 
 2. **Skills 生效**：Codex 自动加载 `.agents/skills/` 下的技能
 
-3. **Hooks 生效**：`.codex/config.toml` 中配置的 Hook 自动执行
+3. **Hooks 生效**：`.codex/hooks.json` 中配置的 Hook 自动执行（独立于 `config.toml`，符合 Codex 官方建议）
 
-4. **Agents 使用**：`.codex/agents/` 下的 TOML 格式 agent 定义
+4. **Agents 使用**：`.codex/agents/` 下的 TOML 格式 agent 定义（Codex 自动扫描，无需在 config.toml 注册。字段使用 `developer_instructions`）
 
 5. **目标模式**：使用 `references/目标模式.md` 将 CEL 迭代映射到自主目标导向执行
 
@@ -194,7 +194,7 @@ cel-pre-edit-guard.py  →  from cel_hook_utils import format_deny, format_allow
 | 平台 | `EDIT_TOOLS` | `COMMAND_TOOLS` |
 |------|-------------|----------------|
 | CodeBuddy | `write_to_file`, `replace_in_file` | `execute_command` |
-| Claude Code | `edit_file`, `write`, `edit` | `bash`, `shell`, `terminal` |
-| Codex | `edit`, `write` | `shell`, `run_command` |
+| Claude Code | `Edit`, `Write`, `apply_patch` | `Bash` |
+| Codex | `Edit`, `Write`, `apply_patch` | `Bash` |
 
 Hook 脚本从 `cel_hook_utils` 导入这些集合，而非硬编码工具名。
