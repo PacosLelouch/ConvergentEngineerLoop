@@ -1,5 +1,5 @@
 ---
-name: debug-root-cause-analyst
+name: cel-debug-analyst
 description: 日志根因分析——从日志和堆栈追踪中提取根因，缩小假设空间
 ---
 

@@ -6,14 +6,14 @@
 2. 是否包含不可逆操作
 3. 是否包含安全风险操作
 
-通过 from hook_utils import ... 调用平台特定的输出格式。
+通过 from cel_hook_utils import ... 调用平台特定的输出格式。
 """
 
 import json
 import re
 import sys
 
-from hook_utils import format_deny, format_allow, format_ask, output
+from cel_hook_utils import format_deny, format_allow, format_ask, output, is_cel_active, COMMAND_TOOLS
 
 
 # 完全禁止的命令模式
@@ -81,13 +81,16 @@ def main():
     except (json.JSONDecodeError, EOFError):
         output(format_allow())
 
+    # CEL 未激活时直接放行，不干扰其他系统
+    if not is_cel_active():
+        output(format_allow())
+
     # 从 Hook 输入中提取命令
     tool_name = data.get('tool_name', data.get('tool', ''))
     tool_input = data.get('tool_input', data.get('input', {}))
 
-    # 只拦截命令执行类工具
-    command_tools = {'execute_command', 'bash', 'shell', 'terminal', 'run_command'}
-    if tool_name.lower() not in command_tools:
+    # 只拦截命令执行类工具（使用平台特定的工具名集合）
+    if tool_name.lower() not in COMMAND_TOOLS:
         output(format_allow())
 
     command_str = tool_input.get('command', tool_input.get('cmd', ''))

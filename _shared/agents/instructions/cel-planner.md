@@ -1,5 +1,5 @@
 ---
-name: convergence-planner
+name: cel-planner
 description: 收敛计划器——规划迭代策略，选择参考文件，定义误差度量和停止条件
 ---
 

@@ -22,7 +22,25 @@ CEL 由三层组成：
 
 ## 各平台使用方式
 
-### CodeBuddy
+### 一键安装（推荐）
+
+使用 `sync-platforms.py --install` 自动部署到目标项目，与已有配置合并：
+
+```bash
+# 单个平台
+python scripts/sync-platforms.py --install /path/to/project --platform codebuddy
+python scripts/sync-platforms.py --install /path/to/project --platform claude
+python scripts/sync-platforms.py --install /path/to/project --platform codex
+
+# 所有平台
+python scripts/sync-platforms.py --install /path/to/project --platform all
+```
+
+特性：配置合并（保留其他系统 hooks）、升级清理（移除旧版 CEL 文件）、状态保留、幂等。
+
+### 手动安装
+
+#### CodeBuddy
 
 1. **安装**：将 `CodeBuddy/.codebuddy/` 目录复制到项目根目录
    ```bash
@@ -41,7 +59,7 @@ CEL 由三层组成：
 
 5. **Plan 模式**：使用 `references/Plan模式.md` 将 CEL 迭代映射到 Plan 的 todo
 
-### Codex
+#### Codex
 
 1. **安装**：将 `Codex/` 下的两个目录复制到项目根目录
    ```bash
@@ -57,7 +75,7 @@ CEL 由三层组成：
 
 5. **目标模式**：使用 `references/目标模式.md` 将 CEL 迭代映射到自主目标导向执行
 
-### Claude Code
+#### Claude Code
 
 1. **安装**：将 `ClaudeCode/.claude/` 目录复制到项目根目录
    ```bash
@@ -149,13 +167,34 @@ CEL 由三层组成：
 
 ## Hook 工作原理
 
-Hook 脚本通过 `hook_utils.py` 适配不同平台的输出格式：
+Hook 脚本通过 `cel_hook_utils.py` 适配不同平台的输出格式：
 
 ```
-pre-edit-guard.py     →  from hook_utils import format_deny, format_allow, format_ask, output
+cel-pre-edit-guard.py  →  from cel_hook_utils import format_deny, format_allow, format_ask, output, is_cel_active, EDIT_TOOLS
                           → CodeBuddy: {"permissionDecision": "deny", "reason": "..."}
                           → Codex:     {"permissionDecision": "deny", "reason": "..."}
                           → Claude:    {"hookSpecificOutput": {"permissionDecision": "deny", ...}}
 ```
 
-每个平台有自己的 `hook_utils.py`，输出格式硬编码，不做运行时平台检测。
+每个平台有自己的 `cel_hook_utils.py`（由 `templates/cel_{platform}_utils.py` 模板生成），输出格式硬编码，不做运行时平台检测。
+
+### CEL 激活检查
+
+所有 Hook 脚本在处理前会调用 `is_cel_active()` 检查 CEL 是否激活：
+
+- **激活**：`cel-state.json` 中 `task.description` 非空 → Hook 正常执行拦截逻辑
+- **未激活**：`task.description` 为空 → Hook 直接放行，不干扰其他系统
+
+这意味着 CEL 的 Hook 即使已安装，也不会影响非 CEL 工作流。
+
+### 工具名集合
+
+各平台 `cel_hook_utils.py` 导出精确的平台特定工具名集合：
+
+| 平台 | `EDIT_TOOLS` | `COMMAND_TOOLS` |
+|------|-------------|----------------|
+| CodeBuddy | `write_to_file`, `replace_in_file` | `execute_command` |
+| Claude Code | `edit_file`, `write`, `edit` | `bash`, `shell`, `terminal` |
+| Codex | `edit`, `write` | `shell`, `run_command` |
+
+Hook 脚本从 `cel_hook_utils` 导入这些集合，而非硬编码工具名。

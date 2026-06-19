@@ -12,7 +12,27 @@
 
 ## 快速开始
 
-### 方式一：文件夹包
+### 方式一：一键安装（推荐）
+
+自动将 CEL 部署到指定项目，与已有配置合并（不覆盖其他系统的 hooks/agents）：
+
+```bash
+# 安装到指定项目（单个平台）
+python scripts/sync-platforms.py --install /path/to/your/project --platform codebuddy
+python scripts/sync-platforms.py --install /path/to/your/project --platform claude
+python scripts/sync-platforms.py --install /path/to/your/project --platform codex
+
+# 安装所有平台
+python scripts/sync-platforms.py --install /path/to/your/project --platform all
+```
+
+`--install` 模式特性：
+- **配置合并**：CEL hooks 按 `description` 前缀 `"CEL "` 识别，替换旧版而非重复追加；其他系统的 hooks 和配置完整保留
+- **升级清理**：自动移除旧版 CEL 文件（`hook_utils.py`、旧 `cel-*` 脚本、已删除的 agent），避免残留
+- **状态保留**：`cel-state.json` 仅在不存在时创建，升级不覆盖运行时状态
+- **幂等性**：重复执行不会产生重复配置
+
+### 方式二：文件夹包
 
 选择你的平台，将对应目录下的文件复制到项目根目录：
 
@@ -28,7 +48,7 @@ cp -r Codex/.agents /path/to/your/project/
 cp -r ClaudeCode/.claude /path/to/your/project/
 ```
 
-### 方式二：插件包
+### 方式三：插件包
 
 ```bash
 # 先生成插件包
@@ -66,7 +86,7 @@ scripts/
 
 CodeBuddy/                  # CodeBuddy 文件夹包
 └── .codebuddy/
-    ├── hooks/              # Hook 脚本 + hook_utils.py（CodeBuddy 版）
+    ├── hooks/              # Hook 脚本 + cel_hook_utils.py（CodeBuddy 版）
     ├── agents/             # Markdown + YAML 格式
     ├── skills/             # SKILL.md + references + templates + checklists
     ├── settings.json       # Hook 配置
@@ -74,7 +94,7 @@ CodeBuddy/                  # CodeBuddy 文件夹包
 
 Codex/                      # Codex 文件夹包
 ├── .codex/
-│   ├── hooks/              # Hook 脚本 + hook_utils.py（Codex 版）
+│   ├── hooks/              # Hook 脚本 + cel_hook_utils.py（Codex 版）
 │   ├── agents/             # TOML 格式
 │   ├── config.toml         # Agent + Hook 配置
 │   └── cel-state.json      # 初始状态
@@ -83,7 +103,7 @@ Codex/                      # Codex 文件夹包
 
 ClaudeCode/                 # Claude Code 文件夹包
 └── .claude/
-    ├── hooks/              # Hook 脚本 + hook_utils.py（Claude 版）
+    ├── hooks/              # Hook 脚本 + cel_hook_utils.py（Claude 版）
     ├── agents/             # Markdown + YAML 格式
     ├── skills/             # SKILL.md + references + templates + checklists
     ├── settings.json       # Hook 配置
@@ -110,17 +130,17 @@ ClaudeCode/                 # Claude Code 文件夹包
 └─────────────────────────────────────────────────┘
   ↓
 ┌─── Hook 层 ─────────────────────────────────────┐
-│ 修改前：pre-edit-guard 检查最小修改原则           │
-│ 命令前：dangerous-command-guard 拦截破坏性命令     │
-│ 修改后：post-edit-verify 注入验证提醒             │
-│ 修改后：oscillation-detector 检测震荡             │
+│ 修改前：cel-pre-edit-guard 检查最小修改原则      │
+│ 命令前：cel-dangerous-command-guard 拦截破坏性命令│
+│ 修改后：cel-post-edit-verify 注入验证提醒         │
+│ 修改后：cel-oscillation-detector 检测震荡         │
 └─────────────────────────────────────────────────┘
   ↓
 ┌─── Subagent 层 ─────────────────────────────────┐
-│ convergence-planner    规划迭代策略               │
-│ test-failure-analyst   分析测试失败根因           │
-│ debug-root-cause-analyst 日志根因分析             │
-│ review-convergence-agent 评估迭代质量             │
+│ cel-planner            规划迭代策略               │
+│ cel-test-analyst       分析测试失败根因           │
+│ cel-debug-analyst      日志根因分析               │
+│ cel-reviewer           评估迭代质量               │
 └─────────────────────────────────────────────────┘
 ```
 
@@ -128,19 +148,19 @@ ClaudeCode/                 # Claude Code 文件夹包
 
 | Hook | 触发时机 | 作用 | 拦截方式 |
 |------|---------|------|---------|
-| `pre-edit-guard` | 文件修改前 | 检查最小修改原则、防止测试削弱 | deny（阻止修改） |
-| `dangerous-command-guard` | 命令执行前 | 拦截破坏性命令（force push、rm -rf 等） | deny（阻止命令） |
-| `post-edit-verify` | 文件修改后 | 注入验证提醒（建议运行测试/Lint 等） | additionalContext（不阻止） |
-| `oscillation-detector` | 文件修改后 | 检测震荡（连续无改进、状态来回切换） | deny（阻止继续） |
+| `cel-pre-edit-guard` | 文件修改前 | 检查最小修改原则、防止测试削弱 | deny（阻止修改） |
+| `cel-dangerous-command-guard` | 命令执行前 | 拦截破坏性命令（force push、rm -rf 等） | deny（阻止命令） |
+| `cel-post-edit-verify` | 文件修改后 | 注入验证提醒（建议运行测试/Lint 等） | additionalContext（不阻止） |
+| `cel-oscillation-detector` | 文件修改后 | 检测震荡（连续无改进、状态来回切换） | deny（阻止继续） |
 
 ### Subagent 列表
 
 | Agent | 适用场景 |
 |-------|---------|
-| `convergence-planner` | 规划迭代策略、选择参考文件 |
-| `test-failure-analyst` | 分析测试失败根因 |
-| `debug-root-cause-analyst` | 从日志提取根因 |
-| `review-convergence-agent` | 评估迭代质量、判断停止条件 |
+| `cel-planner` | 规划迭代策略、选择参考文件 |
+| `cel-test-analyst` | 分析测试失败根因 |
+| `cel-debug-analyst` | 从日志提取根因 |
+| `cel-reviewer` | 评估迭代质量、判断停止条件 |
 
 ## 使用示例
 
@@ -164,9 +184,9 @@ Agent（CEL 自动生效）：
 ```
 
 **Hook 在此过程中的作用**：
-- `pre-edit-guard`：确认只修改了 auth.py 一处，没有误改其他文件
-- `post-edit-verify`：提醒运行 `pytest test_user_auth` 验证
-- `oscillation-detector`：确认没有震荡（每轮都有改进）
+- `cel-pre-edit-guard`：确认只修改了 auth.py 一处，没有误改其他文件
+- `cel-post-edit-verify`：提醒运行 `pytest test_user_auth` 验证
+- `cel-oscillation-detector`：确认没有震荡（每轮都有改进）
 
 ### 示例 2：逐步推进重构
 
@@ -177,10 +197,10 @@ Agent（CEL 自动生效）：
   → 加载参考：代码开发.md
   → 评估轮次：识别 8 个 Class 组件需重构
   → 修改轮次 #1：重构 UserProfile 组件
-      pre-edit-guard：✅ 只修改了 UserProfile 相关文件
+      cel-pre-edit-guard：✅ 只修改了 UserProfile 相关文件
       验证：npm test 通过 → 接受
   → 修改轮次 #2：重构 Dashboard 组件
-      pre-edit-guard：✅ 只修改了 Dashboard 相关文件
+      cel-pre-edit-guard：✅ 只修改了 Dashboard 相关文件
       验证：npm test 通过 → 接受
   → ... 每次只重构一个组件 ...
   → 修改轮次 #8：重构最后一个组件 SettingsPanel
@@ -193,7 +213,7 @@ Agent（CEL 自动生效）：
 ```
 Agent 尝试执行：git push --force
 
-dangerous-command-guard 触发：
+cel-dangerous-command-guard 触发：
   → 检测到 force push 命令
   → 返回 deny，原因："禁止 force push，可能覆盖远程提交"
   → Agent 收到拒绝，改为使用安全的 git push
@@ -209,7 +229,7 @@ Agent 修改轮次 #6：方案 B（优化查询）
   验证：性能提升，无新 bug → 接受
 
 Agent 修改轮次 #7：又回到方案 A（又添加缓存层）
-  oscillation-detector 触发：
+  cel-oscillation-detector 触发：
     → 检测到状态在方案 A/B 间来回切换
     → 返回 deny，阻止继续循环
     → 建议用户决策选择最终方案
@@ -228,9 +248,9 @@ python scripts/sync-platforms.py --format folders
 # 生成插件包
 python scripts/sync-platforms.py --format plugins
 
-# 同时生成两种
-python scripts/sync-platforms.py --format folders
-python scripts/sync-platforms.py --format plugins
+# 一键安装到项目（推荐，自动合并配置）
+python scripts/sync-platforms.py --install /path/to/project --platform codebuddy
+python scripts/sync-platforms.py --install /path/to/project --platform all
 ```
 
 ### 修改什么、在哪里改
@@ -243,7 +263,7 @@ python scripts/sync-platforms.py --format plugins
 | 迭代报告/误差度量/回滚记录模板 | `_shared/skills/convergent-engineering-loop/templates/*.md` | 三平台 skills/templates/ |
 | 检查清单 | `_shared/skills/convergent-engineering-loop/checklists/*.md` | 三平台 skills/checklists/ |
 | Hook 检测逻辑 | `_shared/hooks/*.py`（主脚本） | 三平台 hooks/ |
-| Hook 输出格式 | `_shared/hooks/templates/*_utils.py` | 对应平台 hooks/hook_utils.py |
+| Hook 输出格式 | `_shared/hooks/templates/cel_*_utils.py` | 对应平台 hooks/cel_hook_utils.py |
 | Agent 指令 | `_shared/agents/instructions/*.md` | 三平台 agents/ |
 | Agent 元数据 | `_shared/agents/agents.yaml` | 生成时读取 |
 
@@ -263,7 +283,7 @@ python scripts/sync-platforms.py --format plugins
 ### Hook 执行报错
 
 - `python: command not found`：Python 未加入系统 PATH，参考[前置条件](#前置条件)
-- `ModuleNotFoundError`：确保 `hook_utils.py` 与其他 hook 脚本在同一目录
+- `ModuleNotFoundError`：确保 `cel_hook_utils.py` 与其他 hook 脚本在同一目录
 - JSON 解析错误：Hook 脚本通过 stdin 接收输入、stdout 输出 JSON，确保没有额外的 print 语句干扰输出
 
 详细使用指南见 `_shared/README.md`。

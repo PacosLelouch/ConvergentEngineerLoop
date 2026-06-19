@@ -6,7 +6,7 @@
 2. 是否修改了不应修改的文件（测试断言、公共接口等）
 3. 是否有明确的验证计划
 
-通过 from hook_utils import ... 调用平台特定的输出格式。
+通过 from cel_hook_utils import ... 调用平台特定的输出格式。
 """
 
 import json
@@ -15,8 +15,11 @@ import re
 import sys
 
 # Python 运行时自动将脚本所在目录加入 sys.path
-# 因此 from hook_utils import ... 可以找到同目录下的 hook_utils.py
-from hook_utils import format_deny, format_allow, format_ask, format_additional_context, output
+# 因此 from cel_hook_utils import ... 可以找到同目录下的 cel_hook_utils.py
+from cel_hook_utils import (
+    format_deny, format_allow, format_ask, format_additional_context,
+    output, is_cel_active, EDIT_TOOLS,
+)
 
 
 # 不应被削弱的测试文件模式
@@ -106,13 +109,16 @@ def main():
         # 无法解析输入，放行
         output(format_allow())
 
+    # CEL 未激活时直接放行，不干扰其他系统
+    if not is_cel_active():
+        output(format_allow())
+
     # 从 Hook 输入中提取工具调用信息
     tool_name = data.get('tool_name', data.get('tool', ''))
     tool_input = data.get('tool_input', data.get('input', {}))
 
-    # 只拦截文件修改类工具
-    edit_tools = {'write_to_file', 'replace_in_file', 'edit_file', 'write', 'edit'}
-    if tool_name.lower() not in edit_tools:
+    # 只拦截文件修改类工具（使用平台特定的工具名集合）
+    if tool_name.lower() not in EDIT_TOOLS:
         output(format_allow())
 
     filepath = tool_input.get('filePath', tool_input.get('path', tool_input.get('file', '')))

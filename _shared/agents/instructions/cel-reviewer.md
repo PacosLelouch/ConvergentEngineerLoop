@@ -1,5 +1,5 @@
 ---
-name: review-convergence-agent
+name: cel-reviewer
 description: 收敛审查——评估迭代质量，判断是否满足停止条件，检测震荡
 ---
 

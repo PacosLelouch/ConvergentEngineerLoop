@@ -13,13 +13,14 @@ import json
 import os
 import sys
 
-from hook_utils import (
+from cel_hook_utils import (
     format_deny,
     format_allow,
     format_additional_context,
     output,
     load_state,
     save_state,
+    is_cel_active,
 )
 
 
@@ -103,6 +104,10 @@ def main():
     try:
         data = json.load(sys.stdin)
     except (json.JSONDecodeError, EOFError):
+        output(format_allow())
+
+    # CEL 未激活时直接放行，不干扰其他系统
+    if not is_cel_active():
         output(format_allow())
 
     # 加载状态

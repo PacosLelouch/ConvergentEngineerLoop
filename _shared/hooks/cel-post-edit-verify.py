@@ -14,7 +14,7 @@ import os
 import re
 import sys
 
-from hook_utils import format_additional_context, format_allow, output
+from cel_hook_utils import format_additional_context, format_allow, output, is_cel_active, EDIT_TOOLS
 
 
 # 文件类型对应的验证建议
@@ -96,13 +96,16 @@ def main():
     except (json.JSONDecodeError, EOFError):
         output(format_allow())
 
+    # CEL 未激活时直接放行，不干扰其他系统
+    if not is_cel_active():
+        output(format_allow())
+
     # 从 Hook 输入中提取工具调用信息
     tool_name = data.get('tool_name', data.get('tool', ''))
     tool_input = data.get('tool_input', data.get('input', {}))
 
-    # 只在文件修改类工具后触发
-    edit_tools = {'write_to_file', 'replace_in_file', 'edit_file', 'write', 'edit'}
-    if tool_name.lower() not in edit_tools:
+    # 只在文件修改类工具后触发（使用平台特定的工具名集合）
+    if tool_name.lower() not in EDIT_TOOLS:
         output(format_allow())
 
     filepath = tool_input.get('filePath', tool_input.get('path', tool_input.get('file', '')))

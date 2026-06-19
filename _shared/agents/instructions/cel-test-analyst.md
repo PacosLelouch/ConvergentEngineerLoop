@@ -1,5 +1,5 @@
 ---
-name: test-failure-analyst
+name: cel-test-analyst
 description: 测试失败分析——分析测试失败根因，识别失败簇，建议修复策略
 ---
 

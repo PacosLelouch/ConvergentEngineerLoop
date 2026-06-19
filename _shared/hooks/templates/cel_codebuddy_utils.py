@@ -1,8 +1,22 @@
-"""CodeBuddy 平台的 Hook 输出格式适配器。"""
+"""CodeBuddy 平台的 CEL Hook 工具模块。
+
+提供：
+- 输出格式适配（format_deny/allow/ask/additional_context）
+- 状态文件读写（load_state/save_state）
+- CEL 激活检查（is_cel_active）
+- 平台特定工具名集合（EDIT_TOOLS/COMMAND_TOOLS）
+"""
 
 import json
 import os
 import sys
+
+
+# 本平台被 hook 拦截的文件修改工具名
+EDIT_TOOLS = {'write_to_file', 'replace_in_file'}
+
+# 本平台被 hook 拦截的命令执行工具名
+COMMAND_TOOLS = {'execute_command'}
 
 
 def format_deny(reason):
@@ -53,3 +67,14 @@ def save_state(state):
     os.makedirs(os.path.dirname(STATE_FILE), exist_ok=True)
     with open(STATE_FILE, 'w', encoding='utf-8') as f:
         json.dump(state, f, ensure_ascii=False, indent=2)
+
+
+def is_cel_active():
+    """检查当前是否有 CEL 活跃任务。
+
+    未激活时 hooks 应直接放行，不干扰其他系统。
+    判定依据：cel-state.json 中 task.description 非空。
+    """
+    state = load_state()
+    task_desc = state.get('task', {}).get('description', '')
+    return bool(task_desc.strip())
