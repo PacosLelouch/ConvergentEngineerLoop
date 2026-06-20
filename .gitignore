@@ -33,6 +33,7 @@ ClaudeCode/
 !.codebuddy/skills/
 !.codebuddy/agents/
 !.codebuddy/hooks/
+!.codebuddy/settings.json
 
 # OS
 .DS_Store

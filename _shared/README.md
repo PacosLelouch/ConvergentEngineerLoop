@@ -2,29 +2,20 @@
 
 本文档详细描述如何使用 CEL 系统指导项目迭代，覆盖三个平台：CodeBuddy、Codex、Claude Code。
 
-## 前置条件
-
-- **Python 3.8+**：Hook 脚本用 Python 编写，需要系统 PATH 中有 `python` 命令
-  - Windows：安装 Python 时勾选 "Add Python to PATH"
-  - macOS/Linux：`python3 --version` 可用时，可创建软链接 `sudo ln -s $(which python3) /usr/local/bin/python`
-  - 验证：在终端运行 `python --version`，应输出 Python 3.8+
-- **Git Bash**（仅 Windows + CodeBuddy 用户）：在 CodeBuddy 设置 → Hooks → 高级设置中，将执行器配置为 `C:\Program Files\Git\bin\bash.exe`
-
 ## 系统架构
 
-CEL 由三层组成：
+CEL 由两层组成：
 
 | 层 | 功能 | 执行方式 |
 |---|---|---|
 | **Skill** | 操作性协议、参考文件、模板、检查清单 | Agent 读取 SKILL.md 后按协议执行 |
-| **Hook** | 硬约束自动执行 | 平台在特定事件时自动调用 |
 | **Subagent** | 专项推理分析 | Agent 需要时调用 |
 
 ## 各平台使用方式
 
 ### 一键安装（推荐）
 
-使用 `sync-platforms.py --install` 自动部署到目标项目，与已有配置合并：
+使用 `sync-platforms.py --install` 自动部署到目标项目，自动清理旧版配置：
 
 ```bash
 # 单个平台
@@ -36,7 +27,7 @@ python scripts/sync-platforms.py --install /path/to/project --platform codex
 python scripts/sync-platforms.py --install /path/to/project --platform all
 ```
 
-特性：配置合并（保留其他系统 hooks）、升级清理（移除旧版 CEL 文件）、状态保留、幂等。
+特性：升级清理（移除旧版 CEL hooks 和配置文件）、状态保留、幂等。
 
 ### 手动安装
 
@@ -49,15 +40,9 @@ python scripts/sync-platforms.py --install /path/to/project --platform all
 
 2. **Skills 生效**：CodeBuddy 自动加载 `.codebuddy/skills/` 下的技能
 
-3. **Hooks 生效**：`.codebuddy/settings.json` 中配置的 Hook 自动执行
-   - 修改文件前：`pre-edit-guard` 检查最小修改原则
-   - 执行命令前：`dangerous-command-guard` 拦截危险命令
-   - 修改文件后：`post-edit-verify` 提醒验证
-   - 修改文件后：`oscillation-detector` 检测震荡
+3. **Agents 使用**：`.codebuddy/agents/` 下的 agent 定义在对话中可被调用
 
-4. **Agents 使用**：`.codebuddy/agents/` 下的 agent 定义在对话中可被调用
-
-5. **Plan 模式**：使用 `references/Plan模式.md` 将 CEL 迭代映射到 Plan 的 todo
+4. **Plan 模式**：使用 `references/Plan模式.md` 将 CEL 迭代映射到 Plan 的 todo
 
 #### Codex
 
@@ -69,11 +54,9 @@ python scripts/sync-platforms.py --install /path/to/project --platform all
 
 2. **Skills 生效**：Codex 自动加载 `.agents/skills/` 下的技能
 
-3. **Hooks 生效**：`.codex/hooks.json` 中配置的 Hook 自动执行（独立于 `config.toml`，符合 Codex 官方建议）
+3. **Agents 使用**：`.codex/agents/` 下的 TOML 格式 agent 定义（Codex 自动扫描，无需在 config.toml 注册。字段使用 `developer_instructions`）
 
-4. **Agents 使用**：`.codex/agents/` 下的 TOML 格式 agent 定义（Codex 自动扫描，无需在 config.toml 注册。字段使用 `developer_instructions`）
-
-5. **目标模式**：使用 `references/目标模式.md` 将 CEL 迭代映射到自主目标导向执行
+4. **目标模式**：使用 `references/目标模式.md` 将 CEL 迭代映射到自主目标导向执行
 
 #### Claude Code
 
@@ -84,10 +67,7 @@ python scripts/sync-platforms.py --install /path/to/project --platform all
 
 2. **Skills 生效**：Claude Code 自动加载 `.claude/skills/` 下的技能
 
-3. **Hooks 生效**：`.claude/settings.json` 中配置的 Hook 自动执行
-   - Hook 使用 `$CLAUDE_PROJECT_DIR` 环境变量定位脚本
-
-4. **Agents 使用**：`.claude/agents/` 下的 Markdown+YAML 格式 agent 定义
+3. **Agents 使用**：`.claude/agents/` 下的 Markdown+YAML 格式 agent 定义
 
 ## 迭代流程
 
@@ -164,37 +144,3 @@ python scripts/sync-platforms.py --install /path/to/project --platform all
 - **最小修改检查**：`checklists/最小修改检查清单.md` — 确认修改是最小的
 - **验证检查**：`checklists/验证检查清单.md` — 确认使用了外部验证
 - **停止条件检查**：`checklists/停止条件检查清单.md` — 判断是否应该停止
-
-## Hook 工作原理
-
-Hook 脚本通过 `cel_hook_utils.py` 适配不同平台的输出格式：
-
-```
-cel-pre-edit-guard.py  →  from cel_hook_utils import format_deny, format_allow, format_ask, output, is_cel_active, EDIT_TOOLS
-                          → CodeBuddy: {"permissionDecision": "deny", "reason": "..."}
-                          → Codex:     {"permissionDecision": "deny", "reason": "..."}
-                          → Claude:    {"hookSpecificOutput": {"permissionDecision": "deny", ...}}
-```
-
-每个平台有自己的 `cel_hook_utils.py`（由 `templates/cel_{platform}_utils.py` 模板生成），输出格式硬编码，不做运行时平台检测。
-
-### CEL 激活检查
-
-所有 Hook 脚本在处理前会调用 `is_cel_active()` 检查 CEL 是否激活：
-
-- **激活**：`cel-state.json` 中 `task.description` 非空 → Hook 正常执行拦截逻辑
-- **未激活**：`task.description` 为空 → Hook 直接放行，不干扰其他系统
-
-这意味着 CEL 的 Hook 即使已安装，也不会影响非 CEL 工作流。
-
-### 工具名集合
-
-各平台 `cel_hook_utils.py` 导出精确的平台特定工具名集合：
-
-| 平台 | `EDIT_TOOLS` | `COMMAND_TOOLS` |
-|------|-------------|----------------|
-| CodeBuddy | `write_to_file`, `replace_in_file` | `execute_command` |
-| Claude Code | `Edit`, `Write`, `apply_patch` | `Bash` |
-| Codex | `Edit`, `Write`, `apply_patch` | `Bash` |
-
-Hook 脚本从 `cel_hook_utils` 导入这些集合，而非硬编码工具名。
