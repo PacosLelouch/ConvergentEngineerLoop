@@ -22,6 +22,22 @@ python scripts/sync-platforms.py --install /path/to/your/project --platform all
 - **升级清理**：自动移除旧版 CEL 文件（hooks 脚本、settings 中的 hooks 注册等），避免残留
 - **幂等性**：重复执行不会产生重复配置
 
+### 本地运行依赖
+
+运行 `scripts/sync-platforms.py` 需要安装以下 Python 依赖：
+
+| 依赖 | 用途 | 安装方式 |
+|------|------|----------|
+| PyYAML | 解析 YAML 格式的 agent 元数据 | `pip install PyYAML` |
+
+一键安装所有依赖：
+
+```bash
+pip install -r scripts/requirements.txt
+```
+
+> 如果 `import yaml` 失败，脚本会自动提示安装方式并退出。
+
 ### 方式二：文件夹包
 
 选择你的平台，将对应目录下的文件复制到项目根目录：
