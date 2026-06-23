@@ -1,20 +1,32 @@
 # CEL Agent 元数据定义
 # 各 agent 的指令内容在 instructions/ 目录下的同名 .md 文件中
+#
+# 字段说明：
+#   name, description, trigger：平台元数据，用于 subagent 推荐与触发
+#   permission：权限边界标签（详细说明见各 instruction 文件的"权限边界"章节）
+#
+# 注意：复杂度/升级触发条件（complexity_trigger / escalation_trigger）不在此声明，
+# 它们的唯一来源是 SKILL.md 的"Subagent 调用时机"章节条件表，避免重复。
+# trigger 字段使用深度/复杂场景词汇，避免与主 Skill 触发词重叠导致用户直接绕过 Skill。
 
 agents:
   cel-planner:
     name: cel-planner
-    description: 收敛计划器——规划迭代策略，选择参考文件，定义误差度量和停止条件
-    trigger: "规划迭代|制定收敛策略|选择参考|定义误差|规划停止条件"
+    description: 收敛计划器——为复杂任务规划迭代策略，输出YAML结构化收敛计划
+    trigger: "复杂规划|多域迭代策略|方向不明的收敛规划|大规模迭代规划"
+    permission: "可读项目文件 + 可写计划文档；不可编辑代码、不可执行修改类命令"
   cel-test-analyst:
     name: cel-test-analyst
-    description: 测试失败分析——分析测试失败根因，识别失败簇，建议修复策略
-    trigger: "测试失败|测试不通过|test fail|红测"
+    description: 测试失败分析——分析失败簇根因，输出YAML结构化修复方案
+    trigger: "多失败簇分析|跨模块测试失败根因|复杂测试失败聚类"
+    permission: "只读分析；可执行只读验证命令查看测试输出；不可编辑任何文件"
   cel-debug-analyst:
     name: cel-debug-analyst
-    description: 日志根因分析——从日志和堆栈追踪中提取根因，缩小假设空间
-    trigger: "日志分析|根因分析|堆栈追踪|debug|排查"
+    description: 日志根因分析——构建假设空间逐步排除，输出YAML结构化根因报告
+    trigger: "复杂日志根因|多假设排查|假设空间分析|堆栈追踪根因定位"
+    permission: "只读分析；可执行只读验证命令查看日志；不可编辑任何文件"
   cel-reviewer:
     name: cel-reviewer
-    description: 收敛审查——评估迭代质量，判断是否满足停止条件，检测震荡
-    trigger: "评估迭代|收敛审查|是否可以停止|迭代质量"
+    description: 收敛审查——评估迭代质量与震荡，输出YAML结构化审查报告
+    trigger: "震荡检测|连续无改进审查|迭代质量深度评估|收敛停止判定"
+    permission: "只读分析；不可编辑任何文件、不可执行修改类命令"
