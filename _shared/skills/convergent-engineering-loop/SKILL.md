@@ -305,7 +305,7 @@ description: 当工程任务需要通过稳定、可验证、可回滚的小步�
 | `cel-debug-analyst` | 根因不明且假设空间>3 \| 日志跨多个组件 | 主Agent首次定位失败 \| 已排除假设但仍未定位根因 |
 | `cel-reviewer` | 无（仅升级触发） | 连续3轮无改进 \| 震荡模式无法自行突破 \| 主Agent无法判断是否应停止 |
 
-各 Subagent 的分析方法论与 YAML schema 见 `agents/instructions/cel-*.md`。
+各 Subagent 的分析方法论与 YAML schema 见对应平台的 agent 定义文件（由 `_shared/agents/instructions/cel-*.md` 经 `sync-platforms.py` 生成）：`Codex → .codex/agents/cel-*.toml`（嵌入于 `developer_instructions`）、`CodeBuddy → .codebuddy/agents/cel-*.md`、`Claude Code → .claude/agents/cel-*.md`。主 Agent 应读取该定义，按其 YAML schema 委派并遍历执行。
 
 ### 执行 Subagent 返回的 YAML 方案
 
