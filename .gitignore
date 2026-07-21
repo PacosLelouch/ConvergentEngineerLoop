@@ -64,3 +64,7 @@ api_server_err.log
 
 # Runtime session data (scripts, renders, compare reports)
 data/
+
+# CEL 测试产物（每次运行的输出不入仓库）
+test-runs/*
+!test-runs/README.md
