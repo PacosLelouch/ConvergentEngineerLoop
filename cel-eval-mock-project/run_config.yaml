@@ -1,0 +1,114 @@
+# ============================================================
+# CEL A/B 测试编排配置
+#
+# 使用方式：在任意平台新建会话，输入一行：
+#   执行 cel-eval-mock-project/run_config.yaml 中的全部 A/B 测试任务。
+#
+# 占位符解析（Agent 启动时填充）：
+#   {platform} = 从 system prompt 推断，或用户指定
+#   {model}    = 从 system prompt 推断
+#   {now}      = ISO8601 UTC 时间戳
+#   {root}     = cel-eval-mock-project 的绝对路径
+# ============================================================
+
+run:
+  platform: "{platform}"
+  model: "{model}"
+  started_at: "{now}"
+
+paths:
+  root: "{root}"                          # cel-eval-mock-project 目录
+  base: "{root}/base"                     # 全正确模板项目
+  tasks: "{root}/tasks"                   # 各任务的缺陷文件
+  output: "{root}/../test-runs/{platform}_{model}_{now}"
+
+max_rounds: { simple: 10, medium: 20, complex: 35 }
+
+# ============================================================
+# Worker 提示词模板
+#     {task_description} = 任务描述
+#     {workspace}        = working/ 目录的绝对路径
+# ============================================================
+prompts:
+  control: |
+    你是一个软件工程助手。请完成以下任务。完成后说明你做了什么。
+
+    任务：{task_description}
+    工作目录：{workspace}
+
+  cel: |
+    请使用"收敛式工程迭代"技能完成以下任务。遵循技能全部协议：最小更新、外部验证、误差下降接受/上升回滚。
+
+    任务：{task_description}
+    工作目录：{workspace}
+
+# ============================================================
+# 任务列表 — 按此顺序串行执行
+# ============================================================
+task_list:
+  - { id: T01, domain: 代码开发,    complexity: simple,  desc: "src/user_service.py 的 get_user_by_id 在 user_id 不存在时抛 NoneTypeError（42行访问 user.name），请修复。" }
+  - { id: T02, domain: 代码开发,    complexity: medium,  desc: "src/payment.py 的 process_payment 调用 send_receipt 时缺少 user_email 参数；send_receipt 异常时应记日志继续，不回滚支付。" }
+  - { id: T03, domain: 代码开发,    complexity: medium,  desc: "在 src/calculator.py 实现 divide(a,b) 函数，b=0 时抛 DivisionByZeroError（已定义在 src/errors.py）。编写测试覆盖正常和除零情况。" }
+  - { id: T04, domain: 代码开发,    complexity: medium,  desc: "src/data_processor.py 的 transform_data 在空列表时返回 None 而非 []，导致 report.py 中 for 循环报错。只修复空列表处理，不要做其他改动。" }
+  - { id: T05, domain: 测试工程,    complexity: medium,  desc: "分析测试失败并修复：test_auth.py 3个失败（2个代码bug+1个测试断言大小写）、test_session.py 1个Flaky。不删除测试/削弱断言。" }
+  - { id: T06, domain: 测试工程,    complexity: simple,  desc: "src/string_utils.py 的 truncate(text, max_len) 缺少 None输入、负数max_len、多字节字符 的测试覆盖。补充测试。" }
+  - { id: T07, domain: 日志调试,    complexity: medium,  desc: "logs/error.log 频繁出现 ConnectionRefusedError。分析日志定位根因，不要猜测。已知事实→活跃假设→排除假设→确认根因。" }
+  - { id: T08, domain: 代码审查,    complexity: medium,  desc: "处理PR#42的5条review comments：1)api.py:120 SQL注入风险 2)api.py:150变量命名 3)utils.py:30缺docstring 4)config.py:10 timeout解释 5)test_api.py缺401测试。逐条处理，不扩大PR范围。" }
+  - { id: T09, domain: 文档编写,    complexity: simple,  desc: "更新README.md使其与代码一致：安装命令使用旧pip语法、CLI示例的--output-dir已改名为--out、示例输出格式已变化。只修正确实不同的部分。" }
+  - { id: T10, domain: Harness工程, complexity: medium,  desc: "修复CI(.github/workflows/ci.yml)：Python版本3.x→锁定3.11、tests job缺DATABASE_URL环境变量、requirements.txt依赖版本未锁定。做到可复现一键运行。" }
+  - { id: T11, domain: 架构设计,    complexity: complex, desc: "src/monolith.py(400行)混合认证/数据库/缓存逻辑。设计拆分为auth/db/cache三模块方案，定义接口，写入docs/architecture.md。先设计方案再实施。10个已有测试必须保持通过。" }
+  - { id: T12, domain: 项目设计,    complexity: complex, desc: "梳理'用户通知中心'需求：解决冲突(实时vs汇总)、明确非目标、列出风险及缓解策略、定义可测试验收标准。输出docs/notification-center-spec.md。不要写代码。" }
+  - { id: T13, domain: 交叉验证,    complexity: medium,  desc: "核对docs/plan.md中15个条目的done/undone标记与代码实际状态是否一致。修正标记错误，不修改条目内容。缺乏验证证据的done项加注'需验证'。" }
+  - { id: T14, domain: 多域组合,    complexity: complex, desc: "src/export.py的export_csv空数据崩溃→修复Bug+补充测试+同步README说明空数据行为。三个维度全部完成。" }
+  - { id: T15, domain: 震荡易发,    complexity: complex, desc: "src/math_utils.py的calculate_statistics对None值行为不一致。统一为跳过None返回剩余统计结果，不改变接口签名。修复所有测试。" }
+
+# ============================================================
+# 每任务的执行协议（Agent 严格遵循以下步骤）
+# ============================================================
+# 对 task_list 中的每个任务 task：
+#
+# 1. 准备环境
+#    rm -rf {root}/working
+#    cp -r {paths.base} {root}/working
+#    if tasks/{task.id}/init/ 存在非空文件:
+#        cp -r tasks/{task.id}/init/* {root}/working/
+#
+# 2. 记录初始快照
+#    pytest --tb=short -q → {output}/{task.id}/init_tests.txt
+#    记录文件列表: dir /s /b {root}/working/src > {output}/{task.id}/init_files.txt
+#
+# 3. 对照组执行
+#    用 prompts.control 构建提示词（task_description=task.desc, workspace={root}/working）
+#    spawn 全新的 control worker agent（不含任何 CEL 触发词）
+#    等待 worker 完成或达到 max_rounds
+#
+# 4. 采集对照组指标 → {output}/{task.id}/control/
+#    a. 运行 pytest -q > metrics.txt
+#    b. diff -rq base/ working/ > diff.txt
+#    c. 统计: 通过/失败测试数、修改文件数、新增删除行数
+#    d. 记录 worker 对话日志 → agent_log.txt
+#
+# 5. 环境重置
+#    rm -rf {root}/working
+#    cp -r {paths.base} {root}/working
+#    if tasks/{task.id}/init/ 存在非空文件:
+#        cp -r tasks/{task.id}/init/* {root}/working/
+#
+# 6. 实验组执行
+#    用 prompts.cel 构建提示词
+#    spawn 全新的 CEL worker agent（含"收敛式工程迭代"触发词）
+#    等待 worker 完成或达到 max_rounds
+#
+# 7. 采集实验组指标 → {output}/{task.id}/cel/
+#    同步骤 4
+#
+# 8. 对比分析 → {output}/{task.id}/comparison.yaml
+#    { metric: { cel: X, control: Y, delta: X-Y, winner: cel|control|tie } }
+#
+# 9. 清理
+#    rm -rf {root}/working
+#
+# ============================================================
+# 全部任务完成后，生成聚合报告 → {output}/report.md
+# 格式：总表 + 按领域分 + 显著性检验 + 定性发现
+# ============================================================

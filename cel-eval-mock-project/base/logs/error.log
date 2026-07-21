@@ -1,0 +1,28 @@
+2026-07-20 14:30:01 [INFO] Starting application v2.4.1
+2026-07-20 14:30:05 [INFO] Loading configuration...
+2026-07-20 14:30:06 [INFO] Database connection pool initialized (size=10)
+2026-07-20 14:30:06 [INFO] Connecting to database at localhost:5433
+2026-07-20 14:30:06 [ERROR] db_connection.py:25 - ConnectionRefusedError: [Errno 61] Connection refused: port 5433 not available
+2026-07-20 14:30:06 [ERROR] api_handler.py:18 - 请求处理失败: ConnectionRefusedError: [Errno 61] Connection refused
+2026-07-20 14:30:07 [ERROR] db_connection.py:25 - ConnectionRefusedError: [Errno 61] Connection refused: port 5433 not available
+2026-07-20 14:30:07 [ERROR] db_connection.py:25 - ConnectionRefusedError: [Errno 61] Connection refused: port 5433 not available
+2026-07-20 14:30:08 [WARN] Retrying connection (attempt 2/5)...
+2026-07-20 14:30:08 [ERROR] db_connection.py:25 - ConnectionRefusedError: [Errno 61] Connection refused: port 5433 not available
+2026-07-20 14:30:09 [ERROR] query_builder.py:32 - Cannot build query: no active connection
+2026-07-20 14:30:09 [ERROR] api_handler.py:18 - 请求处理失败: Cannot build query: no active connection
+2026-07-20 14:30:09 [WARN] Retrying connection (attempt 3/5)...
+2026-07-20 14:30:09 [ERROR] db_connection.py:25 - ConnectionRefusedError: [Errno 61] Connection refused: port 5433 not available
+2026-07-20 14:30:10 [ERROR] db_connection.py:25 - ConnectionRefusedError: [Errno 61] Connection refused: port 5433 not available
+2026-07-20 14:30:11 [INFO] External API: fetching user preferences...
+2026-07-20 14:30:15 [ERROR] http_client.py:42 - TimeoutError: Request to api.example.com/task?id=123 timed out after 10s
+2026-07-20 14:30:15 [WARN] External API call failed, using cached preferences
+2026-07-20 14:30:15 [WARN] Retrying connection (attempt 4/5)...
+2026-07-20 14:30:15 [ERROR] db_connection.py:25 - ConnectionRefusedError: [Errno 61] Connection refused: port 5433 not available
+2026-07-20 14:30:16 [INFO] Health check requested
+2026-07-20 14:30:16 [ERROR] db_connection.py:25 - ConnectionRefusedError: [Errno 61] Connection refused: port 5433 not available
+2026-07-20 14:30:16 [WARN] Health check FAILED: database unreachable
+2026-07-20 14:30:17 [WARN] Retrying connection (attempt 5/5)...
+2026-07-20 14:30:17 [ERROR] db_connection.py:25 - ConnectionRefusedError: [Errno 61] Connection refused: port 5433 not available
+2026-07-20 14:30:17 [CRITICAL] All connection attempts failed. Service degraded.
+2026-07-20 14:30:18 [ERROR] api_handler.py:18 - 请求处理失败: Cannot build query: no active connection
+2026-07-20 14:30:20 [ERROR] db_connection.py:25 - ConnectionRefusedError: [Errno 61] Connection refused: port 5433 not available
