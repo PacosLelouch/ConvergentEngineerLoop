@@ -63,52 +63,115 @@ task_list:
   - { id: T15, domain: 震荡易发,    complexity: complex, desc: "src/math_utils.py的calculate_statistics对None值行为不一致。统一为跳过None返回剩余统计结果，不改变接口签名。修复所有测试。" }
 
 # ============================================================
+# 编码要求：所有输出文件（.txt, .yaml, .md）必须以 UTF-8 编码写入。
+# PowerShell 环境下请用 Out-File -Encoding utf8 或 [System.IO.File]::WriteAllText($path, $content, [System.Text.Encoding]::UTF8)
+# ============================================================
+
+# ============================================================
 # 每任务的执行协议（Agent 严格遵循以下步骤）
 # ============================================================
-# 对 task_list 中的每个任务 task：
+# 对 task_list 中的每个任务 task，执行以下步骤：
 #
-# 1. 准备环境
-#    rm -rf {root}/working
-#    cp -r {paths.base} {root}/working
-#    if tasks/{task.id}/init/ 存在非空文件:
-#        cp -r tasks/{task.id}/init/* {root}/working/
+# ── 步骤 1：准备环境 ──
+#   rm -rf {root}/working
+#   cp -r {paths.base} {root}/working
+#   如果 tasks/{task.id}/init/ 存在非空文件:
+#       cp -r tasks/{task.id}/init/* {root}/working/
 #
-# 2. 记录初始快照
-#    pytest --tb=short -q → {output}/{task.id}/init_tests.txt
-#    记录文件列表: dir /s /b {root}/working/src > {output}/{task.id}/init_files.txt
+# ── 步骤 2：记录初始快照 ──
+#   cd {root}/working
+#   pytest --tb=short -q > {output}/{task.id}/init_tests.txt     # 初始测试结果
+#   dir /s /b src\ > {output}/{task.id}/init_files.txt           # 源文件列表
 #
-# 3. 对照组执行
-#    用 prompts.control 构建提示词（task_description=task.desc, workspace={root}/working）
-#    spawn 全新的 control worker agent（不含任何 CEL 触发词）
-#    等待 worker 完成或达到 max_rounds
+# ── 步骤 3：对照组执行 ──
+#   用 prompts.control 构建提示词（task_description=task.desc, workspace={root}/working）
+#   spawn 全新的 control worker agent（不含任何 CEL 触发词）
+#   记录 control 的对话轮次数（你发送了多少条消息）。等待 worker 完成或达到 max_rounds。
 #
-# 4. 采集对照组指标 → {output}/{task.id}/control/
-#    a. 运行 pytest -q > metrics.txt
-#    b. diff -rq base/ working/ > diff.txt
-#    c. 统计: 通过/失败测试数、修改文件数、新增删除行数
-#    d. 记录 worker 对话日志 → agent_log.txt
+# ── 步骤 4：采集对照组指标 ──
+#   cd {root}/working
+#   执行以下命令，将完整输出写入指定文件：
 #
-# 5. 环境重置
-#    rm -rf {root}/working
-#    cp -r {paths.base} {root}/working
-#    if tasks/{task.id}/init/ 存在非空文件:
-#        cp -r tasks/{task.id}/init/* {root}/working/
+#     a) 测试结果:  pytest --tb=short -q           → {output}/{task.id}/control/tests.txt
+#     b) Diff 统计: diff -rq base/ working/ 2>&1   → {output}/{task.id}/control/diff.txt
+#     c) 修改文件数: diff -rq base/ working/ 2>&1 | find /c "differ" (或等效统计)
+#     d) Lint 错误:  ruff check src/ --output-format=concise 2>&1 | find /c /v "" (总行数即错误数)
+#     e) 类型错误:  mypy src/ --no-error-summary 2>&1 | find /c /v ""
+#     f) 附加/删除: 统计 working/ 中总行数 vs base/ 总行数的差值
 #
-# 6. 实验组执行
-#    用 prompts.cel 构建提示词
-#    spawn 全新的 CEL worker agent（含"收敛式工程迭代"触发词）
-#    等待 worker 完成或达到 max_rounds
+#   解析以上命令输出，提取以下数值：
+#     test_pass: int       — 通过的测试数（从 pytest 输出提取 "N passed"）
+#     test_fail: int       — 失败的测试数（从 pytest 输出提取 "N failed"）
+#     test_total: int      — 总测试数（pass + fail + error）
+#     files_changed: int   — 与 base 不同的文件数
+#     lint_errors: int     — lint 错误数
+#     type_errors: int     — 类型检查错误数
+#     lines_added_approx: int — 新增行数（粗略统计）
+#     lines_removed_approx: int — 删除行数
+#     worker_rounds: int   — 对话轮次数
 #
-# 7. 采集实验组指标 → {output}/{task.id}/cel/
-#    同步骤 4
+#   保存对话日志到 {output}/{task.id}/control/agent_log.txt
 #
-# 8. 对比分析 → {output}/{task.id}/comparison.yaml
-#    { metric: { cel: X, control: Y, delta: X-Y, winner: cel|control|tie } }
+# ── 步骤 5：环境重置 ──
+#   rm -rf {root}/working
+#   cp -r {paths.base} {root}/working
+#   如果 tasks/{task.id}/init/ 存在非空文件:
+#       cp -r tasks/{task.id}/init/* {root}/working/
 #
-# 9. 清理
-#    rm -rf {root}/working
+# ── 步骤 6：实验组执行 ──
+#   用 prompts.cel 构建提示词（含"收敛式工程迭代"触发词确保 CEL 技能加载）
+#   spawn 全新的 CEL worker agent
+#   记录对话轮次数，等待 worker 完成
+#
+# ── 步骤 7：采集实验组指标 ──
+#   同步骤 4，写入 {output}/{task.id}/cel/
+#
+# ── 步骤 8：对比分析 ──
+#   生成 {output}/{task.id}/comparison.yaml，内容必须包含以下全部字段：
+#
+#   task: {task.id}
+#   domain: {task.domain}
+#   metrics:
+#     test_pass:      { cel: N, control: N, delta: N }
+#     test_fail:      { cel: N, control: N, delta: N }
+#     files_changed:  { cel: N, control: N, delta: N }
+#     lint_errors:    { cel: N, control: N, delta: N }
+#     type_errors:    { cel: N, control: N, delta: N }
+#     lines_added_approx:  { cel: N, control: N, delta: N }
+#     lines_removed_approx: { cel: N, control: N, delta: N }
+#     worker_rounds:  { cel: N, control: N, delta: N }
+#   summary:
+#     task_completed: { cel: true/false, control: true/false }
+#     winner: cel | control | tie
+#     note: "一句话说明 CEL 在该任务上是否有优势及原因"
+#
+# ── 步骤 9：清理 ──
+#   rm -rf {root}/working
 #
 # ============================================================
 # 全部任务完成后，生成聚合报告 → {output}/report.md
-# 格式：总表 + 按领域分 + 显著性检验 + 定性发现
+# 报告必须以 UTF-8 编码写入，必须包含以下章节：
+#
+# ## 总体结果
+# | 维度 | 对照组均值 | 实验组(CEL)均值 | 差值 | CEL优势 |
+# |------|:---------:|:-------------:|:----:|:-------:|
+# | 测试通过数 | ... | ... | ... | ... |
+# | 修改文件数 | ... | ... | ... | 越少越好 |
+# | Lint错误数 | ... | ... | ... | 越少越好 |
+# | 对话轮次 | ... | ... | ... | 越少越好 |
+# | 任务完成率 | N/15 | N/15 | +/-N | ... |
+#
+# ## 按任务分
+# | 任务 | 领域 | CEL通过 | Control通过 | CEL轮次 | Control轮次 | CEL文件数 | Control文件数 | 胜者 |
+# |:----:|------|:------:|:----------:|:------:|:----------:|:-------:|:-----------:|:----:|
+# | T01 | ... | ... | ... | ... | ... | ... | ... | ... |
+#
+# ## CEL 优势领域
+# 按维度列出 CEL 显著优于 Control 的领域和任务。
+#
+# ## 定性发现
+# 列出 3-5 条对比中的关键定性观察（如"对照组在 T04 做了不必要格式化""实验组在 T15 通过最小更新逐轮收敛"）。
+#
+# ## 结论
+# 一句话总结：CEL 是否使 Agent 的工程任务完成得更好、更稳、更可控。
 # ============================================================
