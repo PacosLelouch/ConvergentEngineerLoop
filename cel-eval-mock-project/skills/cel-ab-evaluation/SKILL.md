@@ -1,6 +1,6 @@
 ---
 name: cel-ab-evaluation
-description: Run or audit isolated CEL versus Control A/B experiments in this repository. Use when the user asks to run the CEL primary task suite, create an evaluation batch, compare CEL and non-CEL workers, verify experiment isolation, audit an existing batch, or summarize objective CEL evaluation metrics.
+description: 在本仓库运行或审计相互隔离的 CEL 与 Control A/B 实验。当用户要求运行 CEL primary 任务套件、创建评测批次、比较有无 CEL 的 worker、验证实验隔离、审计已有批次或汇总 CEL 客观评测指标时使用。
 ---
 
 # CEL A/B 评测

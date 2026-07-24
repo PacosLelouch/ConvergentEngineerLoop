@@ -199,7 +199,8 @@ Agent 修改轮次 #7：又回到方案 A（又添加缓存层）
 
 ### 修改真源
 
-所有内容维护在 `_shared/` 目录下。修改后运行 sync 生成三平台文件：
+CEL 产品内容维护在 `_shared/` 目录下。修改后运行 sync 生成三平台文件；
+A/B 评测编排 skill 单独维护在 `cel-eval-mock-project/skills/`：
 
 ```bash
 # 生成文件夹包
@@ -212,9 +213,8 @@ python scripts/sync-platforms.py --format plugins
 python scripts/sync-platforms.py --install /path/to/project --platform codebuddy
 python scripts/sync-platforms.py --install /path/to/project --platform all
 
-# 在本仓库只安装 A/B 编排 skill（不安装 CEL treatment）
-python scripts/sync-platforms.py --install-eval . --platform codex
-python scripts/sync-platforms.py --install-eval . --platform codebuddy
+# 在本仓库同步 A/B 评测专用 skill（不参与产品安装）
+python cel-eval-mock-project/sync_evaluation_skill.py
 ```
 
 ### 修改什么、在哪里改
@@ -226,7 +226,7 @@ python scripts/sync-platforms.py --install-eval . --platform codebuddy
 | 参考文件（9 种任务类型 + 2 种模式） | `_shared/skills/convergent-engineering-loop/references/*.md` | 三平台 skills/references/ |
 | 迭代报告/误差度量/回滚记录模板 | `_shared/skills/convergent-engineering-loop/templates/*.md` | 三平台 skills/templates/ |
 | 检查清单 | `_shared/skills/convergent-engineering-loop/checklists/*.md` | 三平台 skills/checklists/ |
-| A/B 评测编排协议 | `_shared/skills/cel-ab-evaluation/` | 当前仓库 `.agents/skills/`、`.codebuddy/skills/` 或平台安装包 |
+| A/B 评测编排协议 | `cel-eval-mock-project/skills/cel-ab-evaluation/` | 仅当前仓库 `.agents/skills/`、`.codebuddy/skills/` |
 | Agent 指令 | `_shared/agents/instructions/*.md` | 三平台 agents/ |
 | Agent 元数据 | `_shared/agents/agents.yaml` | 生成时读取 |
 

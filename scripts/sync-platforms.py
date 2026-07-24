@@ -10,7 +10,6 @@ sync-platforms.py —— 从 _shared/ 真源生成三平台独立可用的文件
 folders 模式：生成 CodeBuddy/、Codex/、ClaudeCode/ 三个目录
 plugins 模式：生成 dist/ 下的各平台原生插件格式
 install 模式：将 CEL 部署到用户项目目录，自动清理旧版 hooks 和配置
-install-eval 模式：只安装 A/B 编排 skill，不安装 CEL treatment skill
 """
 
 import argparse
@@ -144,7 +143,7 @@ def generate_codex_agent(agent_name, agents_meta):
             lines.append(f'{key} = "{val}"')
 
     # developer_instructions 字段（多行字符串，Codex subagent 必需）
-    lines.append(f'developer_instructions = """')
+    lines.append('developer_instructions = """')
     lines.append(instruction)
     lines.append('"""')
 
@@ -237,11 +236,11 @@ def _clean_cel_agents_dir(target_agents_dir):
 
 
 def _clean_cel_skills_dir(target_skills_parent_dir):
-    """清理目标 skills 父目录中的旧版 CEL skill 目录。
+    """清理目标 skills 父目录中的 CEL 目录及历史误装的评测 skill。
 
     清理范围：
     - convergent-engineering-loop/ 目录（CEL 执行 skill）
-    - cel-ab-evaluation/ 目录（CEL 测试专用 skill）
+    - cel-ab-evaluation/ 目录（旧版本曾误随产品安装，现仅作遗留清理）
     """
     for skill_name in ('convergent-engineering-loop', 'cel-ab-evaluation'):
         skill_dir = os.path.join(target_skills_parent_dir, skill_name)
@@ -292,7 +291,6 @@ def _clean_codex_config_toml(config_path):
 
         # 跳过 [[agents]] 块中 name 以 "cel-" 开头的
         if stripped == '[[agents]]':
-            block_start = i
             block = [lines[i]]
             i += 1
             while i < len(lines):
@@ -361,7 +359,6 @@ def _remove_trailing_blank(lines):
 def generate_folders(output_dir):
     """生成文件夹包模式：CodeBuddy/、Codex/、ClaudeCode/。"""
     shared_skills = os.path.join(SHARED_DIR, 'skills', 'convergent-engineering-loop')
-    shared_eval_skill = os.path.join(SHARED_DIR, 'skills', 'cel-ab-evaluation')
     agents_meta = read_agents_yaml()
     agent_names = list(agents_meta.get('agents', {}).keys())
 
@@ -380,7 +377,6 @@ def generate_folders(output_dir):
 
     _deploy_agents(os.path.join(codebuddy_dir, 'agents'), agent_names, agents_meta, 'codebuddy')
     copy_skill_dir(shared_skills, os.path.join(codebuddy_dir, 'skills', 'convergent-engineering-loop'))
-    copy_skill_dir(shared_eval_skill, os.path.join(codebuddy_dir, 'skills', 'cel-ab-evaluation'))
 
     # ========== Codex ==========
     codex_dir = os.path.join(output_dir, 'Codex', '.codex')
@@ -388,14 +384,12 @@ def generate_folders(output_dir):
 
     _deploy_agents(os.path.join(codex_dir, 'agents'), agent_names, agents_meta, 'codex')
     copy_skill_dir(shared_skills, os.path.join(agents_dir, 'skills', 'convergent-engineering-loop'))
-    copy_skill_dir(shared_eval_skill, os.path.join(agents_dir, 'skills', 'cel-ab-evaluation'))
 
     # ========== ClaudeCode ==========
     claude_dir = os.path.join(output_dir, 'ClaudeCode', '.claude')
 
     _deploy_agents(os.path.join(claude_dir, 'agents'), agent_names, agents_meta, 'claude')
     copy_skill_dir(shared_skills, os.path.join(claude_dir, 'skills', 'convergent-engineering-loop'))
-    copy_skill_dir(shared_eval_skill, os.path.join(claude_dir, 'skills', 'cel-ab-evaluation'))
 
 
 # ============================================================
@@ -408,7 +402,6 @@ def generate_plugins(output_dir):
     clean_dir(dist_dir)
 
     shared_skills = os.path.join(SHARED_DIR, 'skills', 'convergent-engineering-loop')
-    shared_eval_skill = os.path.join(SHARED_DIR, 'skills', 'cel-ab-evaluation')
     agents_meta = read_agents_yaml()
     agent_names = list(agents_meta.get('agents', {}).keys())
 
@@ -436,7 +429,6 @@ def generate_plugins(output_dir):
 
     # skills
     copy_skill_dir(shared_skills, os.path.join(claude_plugin_dir, 'skills', 'convergent-engineering-loop'))
-    copy_skill_dir(shared_eval_skill, os.path.join(claude_plugin_dir, 'skills', 'cel-ab-evaluation'))
 
     # agents
     _deploy_agents(os.path.join(claude_plugin_dir, 'agents'), agent_names, agents_meta, 'claude')
@@ -469,14 +461,6 @@ def generate_plugins(output_dir):
                 arcname = os.path.relpath(file_path, shared_skills)
                 zf.write(file_path, arcname)
 
-    eval_skill_zip_path = os.path.join(codebuddy_plugin_dir, 'cel-ab-evaluation.zip')
-    with zipfile.ZipFile(eval_skill_zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
-        for root, dirs, files in os.walk(shared_eval_skill):
-            for file in files:
-                file_path = os.path.join(root, file)
-                arcname = os.path.relpath(file_path, shared_eval_skill)
-                zf.write(file_path, arcname)
-
     # agents
     _deploy_agents(os.path.join(codebuddy_plugin_dir, 'agents'), agent_names, agents_meta, 'codebuddy')
 
@@ -492,7 +476,6 @@ def generate_plugins(output_dir):
 
     # .agents/skills
     copy_skill_dir(shared_skills, os.path.join(codex_plugin_dir, '.agents', 'skills', 'convergent-engineering-loop'))
-    copy_skill_dir(shared_eval_skill, os.path.join(codex_plugin_dir, '.agents', 'skills', 'cel-ab-evaluation'))
 
 
 # ============================================================
@@ -514,7 +497,6 @@ def install_to_project(project_dir, platform):
             '发现 treatment skill。请由 _runner.py batch 只安装到 CEL 工作区。'
         )
     shared_skills = os.path.join(SHARED_DIR, 'skills', 'convergent-engineering-loop')
-    shared_eval_skill = os.path.join(SHARED_DIR, 'skills', 'cel-ab-evaluation')
     agents_meta = read_agents_yaml()
     agent_names = list(agents_meta.get('agents', {}).keys())
 
@@ -533,41 +515,17 @@ def install_to_project(project_dir, platform):
         if plat == 'codebuddy':
             plat_dir = os.path.join(project_dir, '.codebuddy')
             _install_codebuddy(plat_dir, shared_skills, agent_names, agents_meta)
-            copy_skill_dir(shared_eval_skill, os.path.join(plat_dir, 'skills', 'cel-ab-evaluation'))
         elif plat == 'claude':
             plat_dir = os.path.join(project_dir, '.claude')
             _install_claude(plat_dir, shared_skills, agent_names, agents_meta)
-            copy_skill_dir(shared_eval_skill, os.path.join(plat_dir, 'skills', 'cel-ab-evaluation'))
         elif plat == 'codex':
             codex_dir = os.path.join(project_dir, '.codex')
             agents_dir = os.path.join(project_dir, '.agents')
             _install_codex(codex_dir, agents_dir, shared_skills, agent_names, agents_meta)
-            copy_skill_dir(shared_eval_skill, os.path.join(agents_dir, 'skills', 'cel-ab-evaluation'))
         else:
             print(f'未知平台：{plat}，跳过')
 
     print(f'CEL 已安装到 {project_dir}（平台：{", ".join(platforms)}）')
-
-
-def install_evaluation_skill(project_dir, platform):
-    """只安装编排 skill；评测仓库根目录必须使用此模式。"""
-    shared_eval_skill = os.path.join(SHARED_DIR, 'skills', 'cel-ab-evaluation')
-    platforms = [platform] if platform != 'all' else ['codebuddy', 'claude', 'codex']
-    destinations = {
-        'codebuddy': os.path.join(project_dir, '.codebuddy', 'skills'),
-        'claude': os.path.join(project_dir, '.claude', 'skills'),
-        'codex': os.path.join(project_dir, '.agents', 'skills'),
-    }
-    for plat in platforms:
-        destination = destinations[plat]
-        copy_skill_dir(
-            shared_eval_skill,
-            os.path.join(destination, 'cel-ab-evaluation'),
-        )
-    print(
-        f'CEL A/B 评测 skill 已安装到 {project_dir}'
-        f'（平台：{", ".join(platforms)}；未安装 treatment skill）'
-    )
 
 
 def _clean_cel_hooks_from_settings(settings_path):
@@ -681,11 +639,6 @@ def main():
         help='将 CEL 安装到指定项目目录（自动清理旧版 hooks 和配置）'
     )
     parser.add_argument(
-        '--install-eval',
-        metavar='PROJECT_DIR',
-        help='只安装 CEL A/B 编排 skill，不安装 treatment skill'
-    )
-    parser.add_argument(
         '--platform',
         choices=['codebuddy', 'claude', 'codex', 'all'],
         default='all',
@@ -694,16 +647,7 @@ def main():
 
     args = parser.parse_args()
 
-    if args.install and args.install_eval:
-        parser.error('--install 与 --install-eval 不能同时使用')
-
-    if args.install_eval:
-        project_dir = os.path.abspath(args.install_eval)
-        if not os.path.isdir(project_dir):
-            print(f'错误：项目目录不存在：{project_dir}')
-            return
-        install_evaluation_skill(project_dir, args.platform)
-    elif args.install:
+    if args.install:
         # install 模式
         project_dir = os.path.abspath(args.install)
         if not os.path.isdir(project_dir):

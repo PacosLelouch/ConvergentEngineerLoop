@@ -35,9 +35,9 @@ G:\CodesG\codebuddy-code\ConvergentEngineerLoop\test-runs\<batch-id>
 
 ## 协议存放位置
 
-- Skill 入口：`_shared/skills/cel-ab-evaluation/SKILL.md`
-- 批次运行协议：`_shared/skills/cel-ab-evaluation/references/run.md`
-- 结果审计协议：`_shared/skills/cel-ab-evaluation/references/audit.md`
+- Skill 入口：`cel-eval-mock-project/skills/cel-ab-evaluation/SKILL.md`
+- 批次运行协议：`cel-eval-mock-project/skills/cel-ab-evaluation/references/run.md`
+- 结果审计协议：`cel-eval-mock-project/skills/cel-ab-evaluation/references/audit.md`
 - 隔离设计：`meta_plan/experiment-isolation.md`
 - 采集器说明：`cel-eval-mock-project/harness/README.md`
 
@@ -58,19 +58,19 @@ Control 与 CEL 共用任务正文，只有 CEL 组额外启用
 
 ## 安装或同步
 
-Skill 真源位于 `_shared/skills/cel-ab-evaluation`。在评测仓库根目录只能安装
-编排 skill，不能安装 `convergent-engineering-loop` treatment skill：
+Skill 真源位于 `cel-eval-mock-project/skills/cel-ab-evaluation`。使用评测专用脚本
+把它同步到当前仓库的 Codex 与 CodeBuddy 发现目录：
 
 ```powershell
-# Codex
-python scripts/sync-platforms.py --install-eval . --platform codex
+python cel-eval-mock-project/sync_evaluation_skill.py
 
-# CodeBuddy
-python scripts/sync-platforms.py --install-eval . --platform codebuddy
+# 只校验副本是否与真源一致
+python cel-eval-mock-project/sync_evaluation_skill.py --check
 ```
 
-`--install-eval` 不会把 CEL treatment 安装到父目录。每个 CEL worker 所需的
-`convergent-engineering-loop` 由 `_runner.py batch` 单独安装到其 CEL 工作区；
+评测专用 skill 只同步到本仓库的 `.agents/skills/` 和 `.codebuddy/skills/`，不会
+进入 CEL 产品文件夹包、插件包或常规项目安装。每个 CEL worker 所需的
+`convergent-engineering-loop` 由 `_runner.py batch` 单独安装到对应 CEL 工作区；
 Control 工作区不会安装。
 
 不要在评测仓库根目录运行 `--install .`。脚本会主动拒绝这种操作，因为仓库级

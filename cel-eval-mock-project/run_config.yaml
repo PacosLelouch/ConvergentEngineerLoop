@@ -60,8 +60,9 @@ prompt_document:
   path: "../meta_plan/test-run-prompts.md"
   contains: ["整批运行提示词", "独立审计提示词"]
 
-# CEL 执行与评测 skill 真源位于仓库 `_shared/skills/`。
-# Worker 只使用执行 skill 的一次性安装副本；批次前后会校验两个真源摘要。
+# CEL 执行 skill 真源位于仓库 `_shared/skills/`；评测编排 skill 真源位于
+# `cel-eval-mock-project/skills/`。Worker 只使用执行 skill 的一次性安装副本；
+# 批次前后会校验两个真源摘要。
 cel_runtime:
   source: "../_shared/skills/convergent-engineering-loop"
   install_copy_only_for_cel: true

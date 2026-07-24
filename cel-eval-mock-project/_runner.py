@@ -25,7 +25,7 @@ BASE = ROOT / "base"
 TASKS = ROOT / "tasks"
 SUITE_MANIFEST = ROOT / "task_suite.json"
 CEL_SOURCE = PROJECT_ROOT / "_shared" / "skills" / "convergent-engineering-loop"
-CEL_EVAL_SKILL_SOURCE = PROJECT_ROOT / "_shared" / "skills" / "cel-ab-evaluation"
+CEL_EVAL_SKILL_SOURCE = ROOT / "skills" / "cel-ab-evaluation"
 RUNS_ROOT = Path(os.environ.get("CEL_EVAL_OUTPUT", PROJECT_ROOT / "test-runs"))
 OUTPUT = RUNS_ROOT / "manual"
 

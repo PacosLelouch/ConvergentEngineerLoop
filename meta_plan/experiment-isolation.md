@@ -57,6 +57,11 @@ CEL 技能真源位于 `_shared/skills/convergent-engineering-loop`。worker 使
 是批次 CEL 工作区内的一次性安装副本，不会直接修改真源。Control 工作区不安装
 该副本。
 
+A/B 评测编排 skill 真源位于
+`cel-eval-mock-project/skills/cel-ab-evaluation`，只同步到当前评测仓库的
+`.agents/skills/` 与 `.codebuddy/skills/` 供主编排 Agent 发现。产品文件夹包、
+插件包和常规项目安装均不包含该 skill；它也不会被安装进任何 worker 工作区。
+
 ## 观察器非干预
 
 `PostToolUse` hook 只比较工作区内容摘要。没有内容变化的只读工具不会产生伪轮次。
