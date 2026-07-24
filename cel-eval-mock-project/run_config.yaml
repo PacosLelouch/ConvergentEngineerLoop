@@ -1,185 +1,68 @@
-# ============================================================
-# CEL A/B 测试编排配置
+# CEL A/B 实验配置
 #
-# 使用方式：在任意平台新建会话，输入一行：
-#   执行 cel-eval-mock-project/run_config.yaml 中的全部 A/B 测试任务。
-#
-# 占位符解析（Agent 启动时填充）：
-#   {platform} = 从 system prompt 推断，或用户指定
-#   {model}    = 从 system prompt 推断
-#   {now}      = ISO8601 UTC 时间戳（精确到秒，如 20260721T143052Z）
-#   {root}     = cel-eval-mock-project 的绝对路径
-# ============================================================
-#
-# ⚠️ 重新运行规则：
-#   test-runs/ 下可能存在历史运行的产物目录。每次执行必须：
-#   1. 以当前 {now} 生成新的输出目录 {output}
-#   2. 重新执行全部 15 个任务，不跳过、不复用、不参考任何旧目录的数据
-#   3. 旧目录的存在与否对本次运行无任何影响
-#
-# ============================================================
+# 可执行任务的唯一来源是 task_suite.json。批次目录必须由
+# `_runner.py batch` 创建，不能手工复用旧工作区。
 
-run:
+schema_version: 2
+
+task_selection:
+  manifest: task_suite.json
+  default_suite: primary
+
+batch:
+  # 实际值由调用者传入，例如 codex_gpt-5_20260724T120000Z。
+  id: "{batch_id}"
   platform: "{platform}"
   model: "{model}"
-  started_at: "{now}"
+  root: "../test-runs/{batch_id}"
 
-paths:
-  root: "{root}"                          # cel-eval-mock-project 目录
-  base: "{root}/base"                     # 全正确模板项目
-  tasks: "{root}/tasks"                   # 各任务的缺陷文件
-  output: "{root}/../test-runs/{platform}_{model}_{now}"
+  layout:
+    control_workspace: "workspaces/{task_id}/control"
+    cel_workspace: "workspaces/{task_id}/cel"
+    control_result: "results/{task_id}/control"
+    cel_result: "results/{task_id}/cel"
 
-max_rounds: { simple: 10, medium: 20, complex: 35 }
+  invariants:
+    refuse_existing_batch: true
+    independent_workspace_copies: true
+    identical_initial_task_payload: true
+    result_outside_workspace: true
+    validation_in_disposable_copy: true
+    source_integrity_guard: true
 
-# ============================================================
-# Worker 提示词模板
-#     {task_description} = 任务描述
-#     {workspace}        = working/ 目录的绝对路径
-# ============================================================
-prompts:
-  control: |
-    你是一个软件工程助手。请完成以下任务。完成后说明你做了什么。
+worker:
+  # 两组必须使用相同平台、模型、权限策略和最大轮次。
+  same_agent_configuration: true
+  max_turns:
+    simple: 10
+    medium: 20
+    complex: 50
 
-    任务：{task_description}
-    工作目录：{workspace}
+  # Control 只收到公共任务提示，不包含“不要使用 CEL”之类的负向干预。
+  # CEL 在相同公共提示后仅增加技能启用指令。
+  treatment_difference_only: true
 
-  cel: |
-    请使用"收敛式工程迭代"技能完成以下任务。遵循技能全部协议：最小更新、外部验证、误差下降接受/上升回滚。
+observer:
+  hook: PostToolUse
+  same_for_control_and_cel: true
+  hidden_from_model_context: true
+  validation_workspace: disposable_copy
+  output_only: true
+  agent_self_report_is_numeric_source: false
 
-    任务：{task_description}
-    工作目录：{workspace}
+commands:
+  create_batch: "python _runner.py batch {batch_id} {platform} primary"
+  verify_batch: "python _runner.py verify_batch ../test-runs/{batch_id}"
+  codex_run: "python -m harness.codex_runner --config {config} --prompt-file {prompt}"
+  codebuddy_run: "node harness/codebuddy_runner.mjs --config {config} --prompt-file {prompt}"
 
-# ============================================================
-# 任务列表 — 按此顺序串行执行
-# ============================================================
-task_list:
-  - { id: T01, domain: 代码开发,    complexity: simple,  desc: "src/user_service.py 的 get_user_by_id 在 user_id 不存在时抛 NoneTypeError（42行访问 user.name），请修复。" }
-  - { id: T02, domain: 代码开发,    complexity: medium,  desc: "src/payment.py 的 process_payment 调用 send_receipt 时缺少 user_email 参数；send_receipt 异常时应记日志继续，不回滚支付。" }
-  - { id: T03, domain: 代码开发,    complexity: medium,  desc: "在 src/calculator.py 实现 divide(a,b) 函数，b=0 时抛 DivisionByZeroError（已定义在 src/errors.py）。编写测试覆盖正常和除零情况。" }
-  - { id: T04, domain: 代码开发,    complexity: medium,  desc: "src/data_processor.py 的 transform_data 在空列表时返回 None 而非 []，导致 report.py 中 for 循环报错。只修复空列表处理，不要做其他改动。" }
-  - { id: T05, domain: 测试工程,    complexity: medium,  desc: "分析测试失败并修复：test_auth.py 3个失败（2个代码bug+1个测试断言大小写）、test_session.py 1个Flaky。不删除测试/削弱断言。" }
-  - { id: T06, domain: 测试工程,    complexity: simple,  desc: "src/string_utils.py 的 truncate(text, max_len) 缺少 None输入、负数max_len、多字节字符 的测试覆盖。补充测试。" }
-  - { id: T07, domain: 日志调试,    complexity: medium,  desc: "logs/error.log 频繁出现 ConnectionRefusedError。分析日志定位根因，不要猜测。已知事实→活跃假设→排除假设→确认根因。" }
-  - { id: T08, domain: 代码审查,    complexity: medium,  desc: "处理PR#42的5条review comments：1)api.py:120 SQL注入风险 2)api.py:150变量命名 3)utils.py:30缺docstring 4)config.py:10 timeout解释 5)test_api.py缺401测试。逐条处理，不扩大PR范围。" }
-  - { id: T09, domain: 文档编写,    complexity: simple,  desc: "更新README.md使其与代码一致：安装命令使用旧pip语法、CLI示例的--output-dir已改名为--out、示例输出格式已变化。只修正确实不同的部分。" }
-  - { id: T10, domain: Harness工程, complexity: medium,  desc: "修复CI(.github/workflows/ci.yml)：Python版本3.x→锁定3.11、tests job缺DATABASE_URL环境变量、requirements.txt依赖版本未锁定。做到可复现一键运行。" }
-  - { id: T11, domain: 架构设计,    complexity: complex, desc: "src/monolith.py(400行)混合认证/数据库/缓存逻辑。设计拆分为auth/db/cache三模块方案，定义接口，写入docs/architecture.md。先设计方案再实施。10个已有测试必须保持通过。" }
-  - { id: T12, domain: 项目设计,    complexity: complex, desc: "梳理'用户通知中心'需求：解决冲突(实时vs汇总)、明确非目标、列出风险及缓解策略、定义可测试验收标准。输出docs/notification-center-spec.md。不要写代码。" }
-  - { id: T13, domain: 交叉验证,    complexity: medium,  desc: "核对docs/plan.md中15个条目的done/undone标记与代码实际状态是否一致。修正标记错误，不修改条目内容。缺乏验证证据的done项加注'需验证'。" }
-  - { id: T14, domain: 多域组合,    complexity: complex, desc: "src/export.py的export_csv空数据崩溃→修复Bug+补充测试+同步README说明空数据行为。三个维度全部完成。" }
-  - { id: T15, domain: 震荡易发,    complexity: complex, desc: "src/math_utils.py的calculate_statistics对None值行为不一致。统一为跳过None返回剩余统计结果，不改变接口签名。修复所有测试。" }
+prompt_document:
+  path: "../meta_plan/test-run-prompts.md"
+  contains: ["整批运行提示词", "独立审计提示词"]
 
-# ============================================================
-# 编码要求：所有输出文件（.txt, .yaml, .md）必须以 UTF-8 编码写入。
-# PowerShell 环境下请用 Out-File -Encoding utf8 或 [System.IO.File]::WriteAllText($path, $content, [System.Text.Encoding]::UTF8)
-# ============================================================
-
-# ============================================================
-# 每任务的执行协议（Agent 严格遵循以下步骤）
-# ============================================================
-# 对 task_list 中的每个任务 task，执行以下步骤：
-#
-# ── 步骤 1：准备环境 ──
-#   rm -rf {root}/working
-#   cp -r {paths.base} {root}/working
-#   如果 tasks/{task.id}/init/ 存在非空文件:
-#       cp -r tasks/{task.id}/init/* {root}/working/
-#
-# ── 步骤 2：记录初始快照 ──
-#   cd {root}/working
-#   pytest --tb=short -q > {output}/{task.id}/init_tests.txt     # 初始测试结果
-#   dir /s /b src\ > {output}/{task.id}/init_files.txt           # 源文件列表
-#
-# ── 步骤 3：对照组执行 ──
-#   用 prompts.control 构建提示词（task_description=task.desc, workspace={root}/working）
-#   spawn 全新的 control worker agent（不含任何 CEL 触发词）
-#   记录 control 的对话轮次数（你发送了多少条消息）。等待 worker 完成或达到 max_rounds。
-#
-# ── 步骤 4：采集对照组指标 ──
-#   cd {root}/working
-#   执行以下命令，将完整输出写入指定文件：
-#
-#     a) 测试结果:  pytest --tb=short -q           → {output}/{task.id}/control/tests.txt
-#     b) Diff 统计: diff -rq base/ working/ 2>&1   → {output}/{task.id}/control/diff.txt
-#     c) 修改文件数: diff -rq base/ working/ 2>&1 | find /c "differ" (或等效统计)
-#     d) Lint 错误:  ruff check src/ --output-format=concise 2>&1 | find /c /v "" (总行数即错误数)
-#     e) 类型错误:  mypy src/ --no-error-summary 2>&1 | find /c /v ""
-#     f) 附加/删除: 统计 working/ 中总行数 vs base/ 总行数的差值
-#
-#   解析以上命令输出，提取以下数值：
-#     test_pass: int       — 通过的测试数（从 pytest 输出提取 "N passed"）
-#     test_fail: int       — 失败的测试数（从 pytest 输出提取 "N failed"）
-#     test_total: int      — 总测试数（pass + fail + error）
-#     files_changed: int   — 与 base 不同的文件数
-#     lint_errors: int     — lint 错误数
-#     type_errors: int     — 类型检查错误数
-#     lines_added_approx: int — 新增行数（粗略统计）
-#     lines_removed_approx: int — 删除行数
-#     worker_rounds: int   — 对话轮次数
-#
-#   保存对话日志到 {output}/{task.id}/control/agent_log.txt
-#
-# ── 步骤 5：环境重置 ──
-#   rm -rf {root}/working
-#   cp -r {paths.base} {root}/working
-#   如果 tasks/{task.id}/init/ 存在非空文件:
-#       cp -r tasks/{task.id}/init/* {root}/working/
-#
-# ── 步骤 6：实验组执行 ──
-#   用 prompts.cel 构建提示词（含"收敛式工程迭代"触发词确保 CEL 技能加载）
-#   spawn 全新的 CEL worker agent
-#   记录对话轮次数，等待 worker 完成
-#
-# ── 步骤 7：采集实验组指标 ──
-#   同步骤 4，写入 {output}/{task.id}/cel/
-#
-# ── 步骤 8：对比分析 ──
-#   生成 {output}/{task.id}/comparison.yaml，内容必须包含以下全部字段：
-#
-#   task: {task.id}
-#   domain: {task.domain}
-#   metrics:
-#     test_pass:      { cel: N, control: N, delta: N }
-#     test_fail:      { cel: N, control: N, delta: N }
-#     files_changed:  { cel: N, control: N, delta: N }
-#     lint_errors:    { cel: N, control: N, delta: N }
-#     type_errors:    { cel: N, control: N, delta: N }
-#     lines_added_approx:  { cel: N, control: N, delta: N }
-#     lines_removed_approx: { cel: N, control: N, delta: N }
-#     worker_rounds:  { cel: N, control: N, delta: N }
-#   summary:
-#     task_completed: { cel: true/false, control: true/false }
-#     winner: cel | control | tie
-#     note: "一句话说明 CEL 在该任务上是否有优势及原因"
-#
-# ── 步骤 9：清理 ──
-#   rm -rf {root}/working
-#
-# ============================================================
-# 全部任务完成后，生成聚合报告 → {output}/report.md
-# 报告必须以 UTF-8 编码写入，必须包含以下章节：
-#
-# ## 总体结果
-# | 维度 | 对照组均值 | 实验组(CEL)均值 | 差值 | CEL优势 |
-# |------|:---------:|:-------------:|:----:|:-------:|
-# | 测试通过数 | ... | ... | ... | ... |
-# | 修改文件数 | ... | ... | ... | 越少越好 |
-# | Lint错误数 | ... | ... | ... | 越少越好 |
-# | 对话轮次 | ... | ... | ... | 越少越好 |
-# | 任务完成率 | N/15 | N/15 | +/-N | ... |
-#
-# ## 按任务分
-# | 任务 | 领域 | CEL通过 | Control通过 | CEL轮次 | Control轮次 | CEL文件数 | Control文件数 | 胜者 |
-# |:----:|------|:------:|:----------:|:------:|:----------:|:-------:|:-----------:|:----:|
-# | T01 | ... | ... | ... | ... | ... | ... | ... | ... |
-#
-# ## CEL 优势领域
-# 按维度列出 CEL 显著优于 Control 的领域和任务。
-#
-# ## 定性发现
-# 列出 3-5 条对比中的关键定性观察（如"对照组在 T04 做了不必要格式化""实验组在 T15 通过最小更新逐轮收敛"）。
-#
-# ## 结论
-# 一句话总结：CEL 是否使 Agent 的工程任务完成得更好、更稳、更可控。
-# ============================================================
+# CEL 执行与评测 skill 真源位于仓库 `_shared/skills/`。
+# Worker 只使用执行 skill 的一次性安装副本；批次前后会校验两个真源摘要。
+cel_runtime:
+  source: "../_shared/skills/convergent-engineering-loop"
+  install_copy_only_for_cel: true
+  source_must_remain_unchanged: true

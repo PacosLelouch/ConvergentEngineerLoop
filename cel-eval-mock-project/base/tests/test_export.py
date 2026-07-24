@@ -1,5 +1,8 @@
 """T14 导出测试 —— main 分支全部通过。"""
 
+import csv
+import io
+
 from src.export import export_csv
 
 
@@ -15,3 +18,8 @@ def test_export_csv_empty_data():
     """空数据应返回空字符串（不崩溃）。"""
     result = export_csv([])
     assert result == ""
+
+
+def test_export_csv_special_characters_round_trip():
+    data = [{"name": "Doe, Jane", "note": 'said "hello"'}]
+    assert list(csv.DictReader(io.StringIO(export_csv(data)))) == data

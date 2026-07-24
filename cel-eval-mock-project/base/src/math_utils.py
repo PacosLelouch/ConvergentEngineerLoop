@@ -4,9 +4,6 @@ main 分支：所有分支对 None 的返回值不一致（刻意如此，为 T1
 T15 任务：统一 None 处理（跳过 None，返回剩余数据统计）。
 """
 
-import math
-
-
 def calculate_statistics(values: list[float | None]) -> dict:
     """计算均值和中位数。
 

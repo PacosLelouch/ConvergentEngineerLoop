@@ -1,5 +1,11 @@
 # CEL 自我测试 —— Agent 编排方案
 
+> **2026-07-24 实现说明**：本文后续的 `task_list`、agent 自报 metrics、共享
+> `working/` 和 T01→T15 编排均为历史设计，不是当前可执行规范。当前唯一任务源是
+> `cel-eval-mock-project/task_suite.json` 的 `primary`；隔离规范见
+> `meta_plan/experiment-isolation.md`，执行方式见
+> `cel-eval-mock-project/harness/README.md`。旧段落仅保留用于设计沿革追溯。
+
 > 由主 Agent 作为编排者，按照任务测例逐个 spawn worker agent，在 CEL/非CEL 两种条件下分别执行，采集指标、对比分析、落盘报告。这是 CEL 系统**用自身协议测试自身有效性**的元循环验证。
 
 ---

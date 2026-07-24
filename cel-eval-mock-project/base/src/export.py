@@ -24,7 +24,7 @@ def export_csv(data: list[dict], filepath: str | None = None) -> str:
     output.close()
 
     if filepath:
-        with open(filepath, "w", newline="") as f:
+        with open(filepath, "w", newline="", encoding="utf-8") as f:
             f.write(result)
 
     return result

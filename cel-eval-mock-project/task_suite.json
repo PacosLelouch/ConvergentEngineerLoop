@@ -1,0 +1,128 @@
+{
+  "schema_version": 1,
+  "default_suite": "primary",
+  "suites": {
+    "primary": {
+      "purpose": "可执行、具有迭代空间且尽量正交的 CEL A/B 主实验",
+      "tasks": ["T02", "T04", "T05", "T10", "T14", "T16", "T17", "T18", "T19", "T20", "T21", "T22"]
+    },
+    "qualitative": {
+      "purpose": "设计与证据说明任务；单独人工盲评，不与 checkpoint 收敛指标混算",
+      "tasks": ["T11", "T12", "T13"]
+    },
+    "legacy_diagnostic": {
+      "purpose": "保留旧文件用于诊断和校准，但默认测试流程不引用",
+      "tasks": ["T01", "T03", "T06", "T07", "T08", "T09", "T15"]
+    }
+  },
+  "tasks": {
+    "T02": {
+      "domain": "副作用边界",
+      "complexity": "medium",
+      "axis": "主操作成功但次要通知失败",
+      "description": "修复 src/payment.py：调用 send_receipt 时传入用户邮箱；通知异常必须记录日志但不能把已成功的支付回滚。保持未知用户和现有返回结构的行为，并用测试覆盖成功通知与通知失败两条路径。",
+      "allowed_paths": ["src/payment.py", "tests/test_payment.py"]
+    },
+    "T04": {
+      "domain": "最小缺陷修复",
+      "complexity": "simple",
+      "axis": "单点契约校准",
+      "description": "src/data_processor.py 的 transform_data 在空列表时返回 None，导致下游迭代失败。只修复空列表契约为 []，不要改动其他行为。",
+      "allowed_paths": ["src/data_processor.py", "tests/test_data_processor.py"]
+    },
+    "T05": {
+      "domain": "测试诊断",
+      "complexity": "medium",
+      "axis": "区分产品缺陷、错误断言和非确定测试",
+      "description": "分析并修复鉴权测试：过期 token 应抛 AuthError；返回角色的既有契约是小写 admin，修正与该契约冲突的测试断言；把 test_session.py 中依赖 random 和 wall clock 的无效边界测试改为显式固定时刻。不得删除测试或弱化断言。",
+      "allowed_paths": ["src/auth.py", "tests/test_auth.py", "tests/test_session.py"]
+    },
+    "T10": {
+      "domain": "CI 可复现性",
+      "complexity": "medium",
+      "axis": "非运行时代码的环境契约",
+      "description": "修复 .github/workflows/ci.yml 和 requirements.txt：所有 CI job 固定 Python 3.11，tests job 提供 DATABASE_URL，所有直接依赖使用精确 == 版本。保持 lint/tests 两个 job 一键可复现。",
+      "allowed_paths": [".github/workflows/ci.yml", "requirements.txt"]
+    },
+    "T14": {
+      "domain": "多工件一致性",
+      "complexity": "complex",
+      "axis": "实现、测试、文档三方契约",
+      "description": "完善 export_csv：空数据返回空字符串；包含逗号和引号的字段可正确 round-trip；写文件显式使用 UTF-8。补充相应测试，并在 README 说明空 CSV 行为。",
+      "allowed_paths": ["src/export.py", "tests/test_export.py", "README.md"]
+    },
+    "T16": {
+      "domain": "算法规模化",
+      "complexity": "complex",
+      "axis": "小规模正确但大规模栈溢出",
+      "description": "src/search.py 的 full_text_search 和 search_with_filters 使用递归，文档数较大时触发 RecursionError。改为迭代实现，保持函数签名和结果顺序，确保 1000 与 3000 文档场景通过。",
+      "allowed_paths": ["src/search.py", "tests/test_search.py"]
+    },
+    "T17": {
+      "domain": "并发安全",
+      "complexity": "complex",
+      "axis": "共享状态同步",
+      "description": "修复 ThreadSafeCounter 的并发读写。同步原语必须属于每个 counter 实例，禁止模块级全局锁；临界区只保护该实例状态。保留接口，并让确定性同步检查以及 50 线程压力测试通过。",
+      "allowed_paths": ["src/counter.py", "tests/test_counter.py"]
+    },
+    "T18": {
+      "domain": "级联故障定位",
+      "complexity": "complex",
+      "axis": "parser→validator→writer 分层暴露",
+      "description": "parser、validator、writer 三个模块存在关联缺陷：修复一层后会暴露下一层。按可验证的小步顺序修复 YAML 错误传播、必填字段验证和失败写入的临时文件清理，保持公开接口。",
+      "allowed_paths": ["src/parser.py", "src/validator.py", "src/writer.py", "tests/test_config_pipeline.py"]
+    },
+    "T19": {
+      "domain": "兼容性重构",
+      "complexity": "complex",
+      "axis": "新增流式接口同时保持旧接口",
+      "description": "重构 src/legacy_parser.py，使 parse(..., streaming=True) 接受 Iterable[str] 并可惰性解析，同时保持文件路径模式兼容。统一异常语义，所有旧/新测试通过，并编写 docs/legacy-parser-migration.md 说明兼容性与迁移方式。",
+      "allowed_paths": ["src/legacy_parser.py", "tests/test_legacy_parser.py", "docs/legacy-parser-migration.md"]
+    },
+    "T20": {
+      "domain": "证据驱动契约修复",
+      "complexity": "complex",
+      "axis": "文档与生产样本冲突",
+      "description": "天气 API 文档与 logs/api_responses.log 的真实响应冲突。以样本和测试为证据修复 weather_client.py：解析 main.temp、处理缺失字段和 error 响应，并同步更新 docs/weather-api.md；不得修改证据日志。",
+      "allowed_paths": ["src/weather_client.py", "tests/test_weather_client.py", "docs/weather-api.md"]
+    },
+    "T21": {
+      "domain": "可靠性语义",
+      "complexity": "complex",
+      "axis": "重试幂等性与批次原子性",
+      "description": "修复 src/event_ledger.py：相同事件重试不得重复记账；同一 event_id 对应不同内容必须报冲突；批次任一事件无效或造成负余额时不得保留部分更新，并且失败后的合法重试仍能成功。保持公开类和方法签名。",
+      "allowed_paths": ["src/event_ledger.py", "tests/test_event_ledger.py"]
+    },
+    "T22": {
+      "domain": "异步生命周期",
+      "complexity": "complex",
+      "axis": "成功、异常、超时、取消的统一清理",
+      "description": "修复 src/async_fetcher.py：成功、worker 异常、超时和调用方取消四条路径都必须终止所有子任务并且恰好关闭一次 transport；保留结果顺序，空输入不打开连接。不得吞掉原始异常或 CancelledError。",
+      "allowed_paths": ["src/async_fetcher.py", "tests/test_async_fetcher.py"]
+    }
+  },
+  "inventory": {
+    "T01": {"status": "inactive", "reason": "夹具未触发描述中的 NoneTypeError，且与 T04 单点契约修复重复"},
+    "T02": {"status": "primary"},
+    "T03": {"status": "inactive", "reason": "实现+两条测试的机械任务，与 T04 校准任务重复"},
+    "T04": {"status": "primary"},
+    "T05": {"status": "primary", "change": "描述按真实 2 个失败和非确定测试重写"},
+    "T06": {"status": "inactive", "reason": "只补测试且初始全绿，缺少独立隐藏验收/覆盖率信号"},
+    "T07": {"status": "inactive", "reason": "初始全绿且本质是单常量配置修复，迭代空间不足"},
+    "T08": {"status": "inactive", "reason": "合成 review 清单、行号不匹配，且同时混入安全/命名/docstring/测试五类混杂因素"},
+    "T09": {"status": "inactive", "reason": "机械文档替换、初始全绿，与 T10/T14 的非代码工件能力重复"},
+    "T10": {"status": "primary", "change": "增加工作区外静态验收"},
+    "T11": {"status": "qualitative", "reason": "架构质量需盲评，不能与 pytest 收敛曲线混算"},
+    "T12": {"status": "qualitative", "reason": "需求规格质量需 rubric 盲评"},
+    "T13": {"status": "qualitative", "reason": "证据标注有意义但缺少稳定可执行 oracle"},
+    "T14": {"status": "primary", "change": "补充特殊字符、UTF-8 与 README 外部验收"},
+    "T15": {"status": "inactive", "reason": "目标要求忽略 None，但夹具测试断言抛异常，初始 108/108 全绿且 oracle 反向"},
+    "T16": {"status": "primary"},
+    "T17": {"status": "primary", "change": "约束明确为实例锁，增加禁止模块全局锁验收"},
+    "T18": {"status": "primary"},
+    "T19": {"status": "primary", "change": "增加迁移文档验收"},
+    "T20": {"status": "primary", "change": "增加证据文档验收"},
+    "T21": {"status": "primary", "change": "新增"},
+    "T22": {"status": "primary", "change": "新增"}
+  }
+}

@@ -1,0 +1,40 @@
+2024-06-01T08:00:00 INFO Fetching weather for Beijing
+{"main":{"temp":22.5},"humidity":65}
+2024-06-01T08:00:01 INFO Fetching weather for Shanghai
+{"main":{"temp":28.3},"humidity":78}
+2024-06-01T08:00:02 INFO Fetching weather for Guangzhou
+{"main":{"temp":31.0},"humidity":85}
+2024-06-01T08:00:03 ERROR API error for Shenzhen
+{"error":"city not found"}
+2024-06-01T08:00:04 INFO Fetching weather for Chengdu
+{"main":{"temp":19.7},"humidity":92}
+2024-06-01T12:00:00 INFO Fetching weather for Beijing
+{"main":{"temp":25.1},"humidity":60}
+2024-06-01T12:00:01 INFO Fetching weather for Harbin
+{"main":{"temp":-5.2},"humidity":45}
+2024-06-01T12:00:02 WARNING Incomplete response for Urumqi
+{"main":{"temp":15.8}}
+2024-06-01T16:00:00 INFO Fetching weather for Lhasa
+{"main":{"temp":12.0},"humidity":30}
+2024-06-01T16:00:01 INFO Fetching weather for Kunming
+{"main":{"temp":20.5},"humidity":55}
+2024-06-02T08:00:00 INFO Fetching weather for Beijing
+{"main":{"temp":23.0},"humidity":70}
+2024-06-02T08:00:01 INFO Fetching weather for Shanghai
+{"main":{"temp":27.5},"humidity":80}
+2024-06-02T08:00:02 ERROR API error for UnknownCity
+{"error":"city not found"}
+2024-06-02T08:00:03 INFO Fetching weather for Hangzhou
+{"main":{"temp":26.0},"humidity":75}
+2024-06-02T12:00:00 WARNING Incomplete response for Xian
+{"humidity":40}
+2024-06-02T12:00:01 INFO Fetching weather for Nanjing
+{"main":{"temp":24.8},"humidity":68}
+2024-06-02T12:00:02 INFO Fetching weather for Wuhan
+{"main":{"temp":30.5},"humidity":82}
+2024-06-02T16:00:00 INFO Fetching weather for Changsha
+{"main":{"temp":29.0},"humidity":77}
+2024-06-02T16:00:01 ERROR API timeout for Lanzhou
+{"error":"timeout"}
+2024-06-02T16:00:02 INFO Fetching weather for Shenyang
+{"main":{"temp":-2.0},"humidity":35}

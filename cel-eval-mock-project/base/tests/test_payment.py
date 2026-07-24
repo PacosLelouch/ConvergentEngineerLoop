@@ -1,6 +1,5 @@
 """T02 支付测试 —— main 分支全部通过。"""
 
-import pytest
 from unittest.mock import patch
 from src.payment import process_payment
 

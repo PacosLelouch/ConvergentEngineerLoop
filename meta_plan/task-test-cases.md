@@ -24,6 +24,13 @@
 | T13 | 交叉验证 | 计划文档与代码一致性核对 | 中等 | ~20 |
 | T14 | 多域组合 | Bug 修复 + 测试补全 + 文档同步 | 复杂 | ~50 |
 | T15 | 震荡易发 | 经验上易导致 Agent 震荡的任务 | 复杂 | ~30 |
+| T16 | 算法重构 | 递归→迭代转换 + 大规模输入测试 | 复杂 | ~30 |
+| T17 | 并发安全 | 线程安全 + 不破坏单线程性能 | 复杂 | ~50 |
+| T18 | 渐进排查 | 关联 bug 需按正确顺序修复 | 复杂 | ~40 |
+| T19 | 遗留重构 | 300行遗留代码重构+流式支持 | 复杂 | ~80 |
+| T20 | 不完整信息 | 外部 API 文档错误，需推断真实格式 | 复杂 | ~55 |
+| T21 | 可靠性语义 | 重试幂等性 + 冲突检测 + 批次原子性 | 复杂 | ~60 |
+| T22 | 异步生命周期 | 异常/超时/取消的统一资源清理 | 复杂 | ~55 |
 
 ---
 
@@ -370,6 +377,175 @@
 
 ---
 
+### T16 · 算法重构 · 递归→迭代转换
+
+- **任务描述**：
+  > `src/search.py` 中 `full_text_search` 和 `search_with_filters` 使用递归实现逐文档处理。当 documents 数量 >800 时触发 `RecursionError`（超过 Python 默认递归限制 1000）。请将两个函数改为迭代实现，函数签名和行为不变。确保 1000 和 3000 文档的搜索都能通过。
+- **初始工程状态**：
+  - `src/search.py` 的 `full_text_search` 使用 `_search_recursive` 尾递归逐文档检查
+  - `search_with_filters` 间接调用递归函数
+  - `tests/test_search.py` 中 6 个小规模正确性测试通过，2 个大规模测试（1000/3000 docs）因 RecursionError 失败
+- **期望完成状态**：
+  - `full_text_search` 改为迭代实现（for 循环或 while 循环）
+  - `search_with_filters` 改为迭代实现
+  - 全部 10 个测试通过，包括大规模文档测试
+  - 函数签名不改变
+- **成功判定**：
+  - 全量测试通过（10 个测试）
+  - diff 仅在 `src/search.py`
+  - 不改动函数签名
+- **关键观察**：
+  - 对照组是否可能重写整个文件（过度工程），而非做最小转换
+  - CEL 组的最小更新原则是否能做到精准替换递归部分
+  - 递归→迭代是明确的算法模式，但尾递归转循环有其技巧性
+- **复杂度**：复杂（需要理解递归→迭代的转换模式）
+- **预估最小修改行数**：~30 行
+
+---
+
+### T17 · 并发安全 · 线程安全 + 不破坏单线程性能
+
+- **任务描述**：
+  > `src/counter.py` 中 `ThreadSafeCounter` 类的 `increment()` 和 `get()` 方法在并发场景下计数不准确（缺少同步机制）。请修复并发安全问题。约束：(1) 同步原语必须属于每个计数器实例，禁止模块级全局锁；(2) 临界区只保护实例状态；(3) 不能破坏已有的 5 个单线程测试；(4) 编写并发压力测试证明修复有效。
+- **初始工程状态**：
+  - `ThreadSafeCounter` 类名叫 ThreadSafe 但实际没有同步机制
+  - `tests/test_counter.py` 有 5 个单线程测试全通过
+  - 2 个并发测试（`test_concurrent_increment`、`test_concurrent_mixed_ops`）失败——计数不准
+  - 并发压力测试缺失
+- **期望完成状态**：
+  - 2 个并发测试通过
+  - 5 个单线程测试保持通过
+  - 新增加 ≥1 个并发压力测试（≥10 线程, ≥1000 次操作）
+  - 实现使用每实例细粒度锁或其他适当同步原语，不能是模块级全局锁
+- **成功判定**：
+  - 全量测试通过（含并发压力测试连续 5 次运行不失败）
+  - 并发压力测试中最终计数值精确等于总操作数
+  - 无死锁
+- **关键观察**：
+  - 对照组是否只会加模块级全局锁，导致不同实例相互阻塞
+  - CEL 组是否能通过误差驱动找到平衡点（加锁粒度与性能的权衡）
+  - 并发 bug 是否导致震荡（修了这里又坏了那里）
+- **复杂度**：复杂
+- **预估最小修改行数**：~50 行（同步机制 ~20 + 压力测试 ~30）
+
+---
+
+### T18 · 渐进排查 · 关联 bug 需按正确顺序修复
+
+- **任务描述**：
+  > 以下 3 个模块存在相互关联的 bug。修复一个会暴露另一个的测试失败。请找出 3 个 bug 的正确修复顺序，逐一修复。在开始修复前，先推理出正确顺序。
+  > - `src/parser.py` 的 `parse_config` 对非法 YAML 返回空 dict 而非抛异常
+  > - `src/validator.py` 的 `validate` 函数依赖 `parse_config` 返回非空 dict，空 dict 时抛 KeyError
+  > - `src/writer.py` 的 `write_output` 在 `validate` 抛异常时没有清理临时文件
+- **初始工程状态**：
+  - `tests/test_parser.py` 中 2 个失败（非法 YAML 期望异常但返回空 dict）
+  - `tests/test_validator.py` 中 3 个通过（因为单独测试时 parse_config mock 了）
+  - `tests/test_writer.py` 中 1 个失败（集成测试——临时文件残留）
+  - 9 个其他测试通过
+- **期望完成状态**：
+  - 按正确顺序修复 3 个 bug（parser → validator → writer 的依赖链要求先修 parser）
+  - 全量测试通过
+  - 修复顺序被正确记录在 agent 输出中
+- **成功判定**：
+  - 全量测试通过（15 个测试）
+  - Agent 输出包含修复顺序推理链
+  - 每个中间步骤的测试快照显示逐步收敛（失败数 3→1→0 而非 3→5→0）
+- **关键观察**：
+  - 对照组可能不先推理顺序，直接同时改 3 个文件——导致中间状态测试失败数反而上升
+  - CEL 组应体现"先诊断→再规划→再执行"的收敛序列
+  - 这是 CEL 过程价值的典型案例——最终的"全量测试通过"两者都能做到，但过程的混乱程度不同
+- **复杂度**：复杂
+- **预估最小修改行数**：~40 行（3 个模块各 ~10-15 行）
+
+---
+
+### T19 · 遗留重构 · 300 行遗留代码重构 + 流式支持
+
+- **任务描述**：
+  > `src/legacy_parser.py`（300 行）是一个遗留日志解析器。现需在 15 个现有测试**全部保持通过**的前提下，重构 `parse()` 函数使其支持流式输入（从 `parse(file_path)` 扩展为 `parse(source, streaming=False)`，当 `streaming=True` 时接收 `Iterable[str]` 并逐行返回解析结果）。同时写出迁移指南，说明旧调用方式如何迁移到新接口。
+- **初始工程状态**：
+  - `src/legacy_parser.py` 300 行，`parse(file_path: str) -> List[LogEntry]`
+  - `tests/test_legacy_parser.py` 15 个测试全通过
+  - 代码风格差（变量命名随意、3 个 80+ 行函数、magic number 满天飞）
+  - `docs/` 下无迁移指南
+- **期望完成状态**：
+  - `parse(source, streaming=False)` 支持两种模式：
+    - `streaming=False`：接收 `str`（文件路径），返回 `List[LogEntry]`（兼容旧接口）
+    - `streaming=True`：接收 `Iterable[str]`，返回 `Iterator[LogEntry]`
+  - 全部 15 个旧测试通过（无修改）
+  - 新增 ≥5 个测试覆盖两种模式
+  - `docs/legacy-parser-migration.md` 含迁移指南
+- **成功判定**：
+  - 全量测试 ≥20 个，全部通过
+  - 旧测试零修改
+  - 迁移指南包含迁移步骤 + 示例代码
+- **关键观察**：
+  - 对照组是否为了"顺手"重构代码风格而引入回归（范围漂移的风险很大）
+  - CEL 组的"最小更新"协议能否在"功能扩展（允许）"和"风格重构（禁止）"之间做出正确区分
+  - 在遗留代码的大文件上是否出现震荡（改了 A 函数又回到 A 函数）
+- **复杂度**：复杂
+- **预估最小修改行数**：~80 行（重构 ~40 + 测试 ~25 + 文档 ~15）
+
+---
+
+### T20 · 不完整信息 · 外部 API 文档错误，需推断真实格式
+
+- **任务描述**：
+  > 项目依赖的外部天气 API（`src/weather_client.py`）的文档描述与实际返回格式不符。文档说返回 `{"temp": float, "humidity": int}`，但生产日志显示实际返回 `{"main": {"temp": float}, "humidity": int}`（嵌套了一层 `main`）。请根据 `logs/api_responses.log` 中的真实响应数据，推断实际格式，修复 `weather_client.py` 的解析逻辑，并更新 `docs/weather-api.md` 文档使其与实际一致。**不要盲信文档**。
+- **初始工程状态**：
+  - `src/weather_client.py` 的 `get_weather()` 按文档格式解析，生产环境中频繁 KeyError
+  - `logs/api_responses.log` 有 20 条真实 API 响应（包含正常响应 + 错误响应 + 不完整响应）
+  - `tests/test_weather_client.py` 中 2 个测试失败（mock 了文档格式，实际不匹配）
+  - `docs/weather-api.md` 写的格式与文档一致（错误）
+- **期望完成状态**：
+  - 修复 `weather_client.py` 的解析逻辑，适配真实格式
+  - 处理边界情况：不完整响应（缺字段）、错误响应、嵌套路径
+  - 更新 `docs/weather-api.md` 反映真实格式
+  - 更新 mock 测试使其与真实格式一致
+  - 全量测试通过
+- **成功判定**：
+  - 全量测试通过（含解析了真实日志数据的测试）
+  - 边界情况处理正确（不完整响应返回合理默认值，不崩溃）
+  - `docs/weather-api.md` 格式描述与代码解析逻辑一致
+- **关键观察**：
+  - 对照组是否直接相信任务描述中的文档（含错误信息），而不去验证日志
+  - CEL 组的"外部验证优先"协议是否能促使 agent 先去读日志再动手
+  - 不完整信息场景下，agent 能否在"不确定"状态下做出合理假设并记录
+- **复杂度**：复杂
+- **预估最小修改行数**：~55 行（解析修复 ~20 + 边界处理 ~10 + 测试更新 ~15 + 文档 ~10）
+
+---
+
+### T21 · 可靠性语义 · 重试幂等性与批次原子性
+
+- **任务描述**：修复 `src/event_ledger.py`，保证相同事件重试不重复记账；相同 `event_id` 的不同内容报冲突；批次中任一事件无效或造成负余额时不保留部分更新；失败后的合法重试仍能成功。
+- **初始工程状态**：顺序原地更新余额，只保存 event id；冲突被静默忽略，后续事件失败时前面的余额和幂等记录已经提交。
+- **成功判定**：全量测试通过；重复重试、批内重复、冲突 id、失败回滚、失败后重试及输入验证均满足契约。
+- **关键观察**：agent 是否只修某个失败断言，还是先建立“验证→暂存→原子提交”的一致模型。
+- **复杂度**：复杂
+- **初始信号**：6 failed / 117 passed
+
+---
+
+### T22 · 异步生命周期 · 异常/超时/取消的统一清理
+
+- **任务描述**：修复 `src/async_fetcher.py`，让成功、worker 异常、超时和调用方取消都终止全部子任务并恰好关闭一次 transport；不得吞掉原异常或 `CancelledError`，空输入不得打开连接。
+- **初始工程状态**：只在成功路径关闭 transport；worker 异常留下 sibling task，超时和调用方取消跳过资源清理。
+- **成功判定**：五条生命周期测试全部通过，无活跃子任务或未取回 future 警告。
+- **关键观察**：agent 是否只补 `except Exception`，从而漏掉 `CancelledError`，以及是否把 cleanup 放在统一 `finally`。
+- **复杂度**：复杂
+- **初始信号**：3 failed / 120 passed
+
+---
+
+## 当前可执行套件
+
+默认测试流程只读取 `cel-eval-mock-project/task_suite.json` 的 `primary`：
+
+`T02, T04, T05, T10, T14, T16, T17, T18, T19, T20, T21, T22`
+
+T11/T12/T13 进入单独的 qualitative 盲评；T01/T03/T06/T07/T08/T09/T15 保留文件但默认不运行。逐项原因和正交性矩阵见 `meta_plan/task-suite-review.md`。
+
 ## mock 项目生成方案
 
 ### 项目来源
@@ -377,12 +553,11 @@
 `cel-eval-mock-project` 不是"凭空手写"的，而是由两层构造：
 
 ```
-第一层：base 项目（main 分支）
-  └── 一个完全正确、测试全过的 Python 项目，包含所有 15 个任务涉及的模块
+第一层：base 项目
+  └── 一个完全正确、123 个测试全过的 Python 项目，包含 T01-T22 涉及的模块
 
-第二层：任务分支（从 main 派生）
-  └── 每个任务引入"刻意的缺陷"，形成 task/{Tid}-init 分支
-      task/{Tid}-expected 分支为人工编写/脚本生成的校正后版本
+第二层：任务 overlay（tasks/{Tid}/init）
+  └── 将缺陷文件递归合并到 base 的副本；不得替换整个 src/tests 目录
 ```
 
 ### 第一层：base 项目（`main` 分支）
@@ -391,7 +566,7 @@
 
 目录结构与上文 mock 项目建议一致。
 
-### 第二层：任务分支生成规则
+### 第二层：历史任务分支生成草案（已由 overlay 流程替代）
 
 每个 `task/{Tid}-init` 分支从 `main` 派生，通过**特定的文件替换/修改**引入缺陷。
 
@@ -429,6 +604,13 @@ git commit -m "task/{Tid}: expected fix"
 | T13 | `docs/plan.md` 含 15 条目，其中 3 个标记 done 但实际未完成/有质量问题，1 个标记 undone 但已完成 |
 | T14 | `export.py:export_csv` 空列表无防御（崩溃）；缺 `test_export_csv_special_chars`；README 未说明空数据行为 |
 | T15 | `math_utils.py:calculate_statistics` 多个条件分支处理 None 时行为不一致；7 个测试中有 3 失败 + 2 偏差 |
+| T16 | `search.py:full_text_search` 和 `search_with_filters` 使用递归实现，文档 >800 时 RecursionError |
+| T17 | `counter.py:ThreadSafeCounter` 无同步机制名不副实；2 个并发测试失败；并发压力测试缺失 |
+| T18 | `parser.py:parse_config` 非法 YAML 返回 {} 而非异常；`validator.py:validate` 依赖非空 dict 导致 KeyError；`writer.py:write_output` 异常时残留临时文件 |
+| T19 | `legacy_parser.py` 300行 `parse(file_path)` 不支持流式输入；代码风格差但功能正确（15个测试通过）；无迁移文档 |
+| T20 | `weather_client.py:get_weather()` 按错误文档格式解析；`logs/api_responses.log` 含 20 条真实响应（含异常/不完整）；`docs/weather-api.md` 文档格式与真实 API 不符 |
+| T21 | `event_ledger.py` 原地逐事件提交，只按 id 去重，缺少冲突检测、原子回滚与输入验证 |
+| T22 | `async_fetcher.py` 只在成功路径关闭 transport，异常/超时/取消路径缺少子任务回收与关闭 |
 
 ### 关键约束
 

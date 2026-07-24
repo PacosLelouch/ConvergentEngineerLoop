@@ -1,5 +1,11 @@
 # CEL A/B 评价 —— 测试 Harness 设计
 
+> **2026-07-24 实现说明**：本文中的 15-task 分支方案、共享工作区和 agent
+> 日志计数为历史草案。当前实现见 `cel-eval-mock-project/harness/`，默认 12-task
+> 主套件见 `cel-eval-mock-project/task_suite.json`；pytest/ruff/acceptance
+> 在一次性验证镜像中按 mutation checkpoint 运行。隔离不变量见
+> `meta_plan/experiment-isolation.md`。
+
 > 自动化 A/B 测试的基础设施：环境准备、任务分发、结果采集、对比分析的脚本和流程设计。
 
 ---

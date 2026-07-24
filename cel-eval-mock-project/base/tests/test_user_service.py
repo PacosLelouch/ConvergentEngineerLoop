@@ -1,6 +1,5 @@
 """T01 用户服务测试 —— main 分支全部通过。"""
 
-import pytest
 from src.user_service import get_user_by_id, User
 
 
