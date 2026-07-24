@@ -1,0 +1,4 @@
+interface:
+  display_name: "CEL A/B 评测"
+  short_description: "隔离运行并审计 CEL 与 Control 配对实验"
+  default_prompt: "使用 $cel-ab-evaluation 运行 primary 套件并审计结果。"

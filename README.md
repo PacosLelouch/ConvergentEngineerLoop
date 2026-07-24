@@ -211,6 +211,10 @@ python scripts/sync-platforms.py --format plugins
 # 一键安装到项目（推荐，自动清理旧版配置）
 python scripts/sync-platforms.py --install /path/to/project --platform codebuddy
 python scripts/sync-platforms.py --install /path/to/project --platform all
+
+# 在本仓库只安装 A/B 编排 skill（不安装 CEL treatment）
+python scripts/sync-platforms.py --install-eval . --platform codex
+python scripts/sync-platforms.py --install-eval . --platform codebuddy
 ```
 
 ### 修改什么、在哪里改
@@ -222,6 +226,7 @@ python scripts/sync-platforms.py --install /path/to/project --platform all
 | 参考文件（9 种任务类型 + 2 种模式） | `_shared/skills/convergent-engineering-loop/references/*.md` | 三平台 skills/references/ |
 | 迭代报告/误差度量/回滚记录模板 | `_shared/skills/convergent-engineering-loop/templates/*.md` | 三平台 skills/templates/ |
 | 检查清单 | `_shared/skills/convergent-engineering-loop/checklists/*.md` | 三平台 skills/checklists/ |
+| A/B 评测编排协议 | `_shared/skills/cel-ab-evaluation/` | 当前仓库 `.agents/skills/`、`.codebuddy/skills/` 或平台安装包 |
 | Agent 指令 | `_shared/agents/instructions/*.md` | 三平台 agents/ |
 | Agent 元数据 | `_shared/agents/agents.yaml` | 生成时读取 |
 
