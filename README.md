@@ -195,6 +195,17 @@ Agent 修改轮次 #7：又回到方案 A（又添加缓存层）
     → 请求用户决策选择最终方案
 ```
 
+## CEL A/B 评测
+
+运行 CEL 与 Control 隔离实验时，直接在新的 Agent 任务中输入：
+
+```text
+使用 $cel-ab-evaluation 运行 primary 套件并审计结果。
+```
+
+完整的 Agent 用法、手工命令、产物位置和协议入口见
+[`cel-eval-mock-project/README.md`](cel-eval-mock-project/README.md)。
+
 ## 开发和维护
 
 ### 修改真源

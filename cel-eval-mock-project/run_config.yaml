@@ -57,8 +57,8 @@ commands:
   codebuddy_run: "node harness/codebuddy_runner.mjs --config {config} --prompt-file {prompt}"
 
 prompt_document:
-  path: "../meta_plan/test-run-prompts.md"
-  contains: ["整批运行提示词", "独立审计提示词"]
+  path: "README.md"
+  contains: ["使用 Agent 运行（推荐）", "手工运行"]
 
 # CEL 执行 skill 真源位于仓库 `_shared/skills/`；评测编排 skill 真源位于
 # `cel-eval-mock-project/skills/`。Worker 只使用执行 skill 的一次性安装副本；

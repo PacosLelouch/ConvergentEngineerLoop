@@ -4,7 +4,7 @@
 `agent_log.txt`、或直接在 agent 工作区运行外部审计测试的步骤均已废弃。
 
 可直接交给编排 Agent 和审计 Agent 的提示词见
-`meta_plan/test-run-prompts.md`。
+`cel-eval-mock-project/README.md`。
 
 ## 结论
 

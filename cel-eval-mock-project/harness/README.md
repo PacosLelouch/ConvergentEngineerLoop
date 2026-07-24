@@ -4,8 +4,8 @@
 运行 pytest、Ruff 和任务专用验收。验证进程不会在 agent 工作区内创建缓存、
 临时文件或其他可观察状态。
 
-需要交给主编排 Agent 或独立审计 Agent 的可复制提示词，见
-`meta_plan/test-run-prompts.md`。
+需要交给主编排 Agent 或独立审计 Agent 的可复制提示词，见评测项目根目录的
+`README.md`。
 
 ## 推荐流程
 
